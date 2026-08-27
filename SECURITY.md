@@ -11,6 +11,4 @@ ClawBridge is local-first. Treat inbound messages as untrusted, keep credentials
 
 ## Vulnerability reporting
 
-Use GitHub Private Vulnerability Reporting when it is enabled for this repository. Until then, contact the maintainer privately through the GitHub profile rather than opening a public issue.
-
-After the public GitHub repository is enabled, report security issues through GitHub Private Vulnerability Reporting. Do not disclose suspected credentials or vulnerabilities in public issues.
+Use GitHub Private Vulnerability Reporting when it is enabled for this repository. Until then, contact the maintainer privately through the GitHub profile rather than opening a public issue. Do not disclose suspected credentials or vulnerabilities in public issues.
