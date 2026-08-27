@@ -1,0 +1,24 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "clawbridge"
+version = "0.1.0.dev0"
+description = "A lightweight local bridge between WeChat ClawBot and local AI workspaces."
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [{name = "ClawBridge contributors"}]
+dependencies = [
+  "keyring>=25.0",
+  "playwright>=1.48",
+  "qrcode>=8.0",
+  "requests>=2.32",
+]
+
+[project.scripts]
+clawbridge = "clawbridge.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/clawbridge"]

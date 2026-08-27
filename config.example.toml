@@ -1,0 +1,19 @@
+# Copy this file to %LOCALAPPDATA%\ClawBridge\config.toml and replace paths.
+
+[paths]
+# Optional default for compatible local tooling. Configured project roots are authoritative.
+code_root = "C:\\path\\to\\code"
+
+[codex]
+# Optional. Otherwise ClawBridge locates `codex` from PATH.
+# executable = "C:\\path\\to\\codex.exe"
+
+[chat]
+browser = "chrome"
+profile_dir = "%LOCALAPPDATA%\\ClawBridge\\browser\\chrome-profile"
+headless = false
+startup_timeout_seconds = 30
+reply_timeout_seconds = 180
+
+[projects.clawbridge]
+root = "C:\\path\\to\\clawbridge"
