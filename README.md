@@ -1,8 +1,8 @@
-# ClawBridge
+# ClawBridge for WeChat
 
 **English** | [简体中文](README.zh-CN.md)
 
-**Control your local AI workspace from WeChat.**
+**Control local ChatGPT Work and Codex from WeChat - without exposing your development PC to the public Internet.**
 
 ClawBridge is a lightweight, local-first bridge that turns WeChat ClawBot into a remote control and conversation channel for AI development running on your PC.
 
@@ -102,8 +102,8 @@ Cloning the repository and running `python -m clawbridge run` does not automatic
 ## 1. Install ClawBridge
 
 ```powershell
-git clone https://github.com/samzhou1972/clawbridge.git
-cd clawbridge
+git clone https://github.com/samzhou1972/clawbridge-wechat.git
+cd clawbridge-wechat
 python -m pip install -e .
 ```
 

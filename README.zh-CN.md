@@ -1,4 +1,4 @@
-# ClawBridge
+# ClawBridge for WeChat
 
 [English](README.md) | **简体中文**
 
@@ -108,8 +108,8 @@ ClawBridge 不是一个“大而全”的 Agent Framework。它不提供模型�
 ## 1. 安装 ClawBridge
 
 ```powershell
-git clone https://github.com/samzhou1972/clawbridge.git
-cd clawbridge
+git clone https://github.com/samzhou1972/clawbridge-wechat.git
+cd clawbridge-wechat
 python -m pip install -e .
 ```
 
