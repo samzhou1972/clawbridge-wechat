@@ -16,6 +16,7 @@ from clawbridge.channels.weixin import (
 )
 from clawbridge.config import load_config
 from clawbridge.conversation import ConversationService, SessionStore, bind_project, prepare_message
+from clawbridge.doctor import run_doctor
 from clawbridge.project_context import build_project_context  # compatibility for existing tests
 from clawbridge.service import run_bridge, send_work_notification
 
@@ -281,6 +282,7 @@ def _echo() -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="clawbridge")
     sub = parser.add_subparsers(dest="command", required=True)
+    sub.add_parser("doctor", help="Check first-run ClawBridge readiness")
     sub.add_parser("login", help="Bind WeChat ClawBot with QR login")
     sub.add_parser("echo", help="M0: reply world to a new hello message")
     sub.add_parser("run", help="Run the WeChat bridge service")
@@ -308,6 +310,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     args = build_parser().parse_args()
+    if args.command == "doctor":
+        return run_doctor()
     if args.command == "login":
         return _login()
     if args.command == "echo":
