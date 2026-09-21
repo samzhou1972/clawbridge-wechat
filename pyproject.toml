@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "clawbridge"
-version = "0.1.0.dev0"
-description = "A lightweight local bridge between WeChat ClawBot and local AI workspaces."
+version = "0.1.1"
+description = "Local-first WeChat bridge for ChatGPT Work, ChatGPT Web, and read-only Codex CLI."
 readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "MIT"}

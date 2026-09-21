@@ -2,20 +2,23 @@
 
 [English](README.md) | **简体中文**
 
-**通过微信，安全地远程使用本地电脑上的 AI 工作空间与开发能力。**
+**通过微信查看 ChatGPT Work、继续讨论本地项目，并显式触发本机 Codex 只读分析。**
 
-ClawBridge 是一个轻量、local-first 的桥接工具。它把微信 ClawBot 作为控制入口和对话通道，让你在离开开发机时，仍然可以通过手机：
+```text
+微信 → ClawBridge → ChatGPT Work / ChatGPT Web / Codex CLI
+```
 
-- 查看本地 ChatGPT Work 的任务状态与结果；
-- 继续和 ChatGPT 讨论当前项目；
-- 按需补充本地项目、Git 和 Work 上下文；
-- 显式调用本机 Codex CLI，对指定项目进行只读分析；
-- 在任务完成时接收简短通知。
+ClawBridge 是一个轻量、local-first 的桥接工具，面向已经在电脑上使用 ChatGPT 和 Codex 的开发者。它提供一个手机端入口，但并不试图成为“大而全”的 Agent Framework。
 
-详细工作、完整报告、日志与本地代码仍然留在电脑上。ClawBridge 的目标不是把整套开发环境暴露到公网，而是提供一条尽可能轻量、可控的微信到本地 AI 工作区的桥接链路。
+- **`/work` 负责观察**：查看本地 ChatGPT Work 的状态与结果；
+- **`/chat` 负责讨论**：结合轻量本地上下文继续和 ChatGPT 讨论项目，但不会执行代码修改；
+- **`/codex` 负责显式分析**：只有明确调用时，才在配置好的项目上启动 Codex CLI 只读分析；
+- 详细工作、源码、日志与长输出仍留在电脑上，ClawBridge 不要求把开发机直接暴露到公网。
+
+你只需要其中一部分能力时，其余能力可以保持未配置状态。
 
 > **项目状态：Alpha / Early Stage**  
-> 当前首次安装流程只在 Windows 上完成验证。ClawBridge 仍处于早期阶段，不建议作为生产级基础设施使用。腾讯 iLink / 微信 ClawBot 属于外部依赖，其账号、会话、绑定、限频和消息投递行为可能独立变化。
+> 当前完整首次安装流程只在 Windows 上完成验证。ClawBridge 仍处于早期阶段，不建议作为生产级基础设施使用。腾讯 iLink / 微信 ClawBot 属于外部依赖，其账号、会话、绑定、限频和消息投递行为可能独立变化。
 
 ClawBridge 是独立开源项目，与腾讯、微信或 OpenAI 均无隶属、授权或背书关系。
 
@@ -118,6 +121,14 @@ python -m pip install -e .
 ```powershell
 python -m clawbridge --help
 ```
+
+任何时候都可以运行下面的非破坏性首次安装检查：
+
+```powershell
+python -m clawbridge doctor
+```
+
+Doctor 会把尚未配置的可选能力显示为 `SETUP`，而不是直接判定失败。如果要进一步验证 ChatGPT 浏览器登录状态，再运行 `python -m clawbridge chat-browser doctor`。
 
 ---
 

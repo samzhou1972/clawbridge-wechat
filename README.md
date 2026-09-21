@@ -2,19 +2,20 @@
 
 **English** | [简体中文](README.zh-CN.md)
 
-**Control local ChatGPT Work and Codex from WeChat - without exposing your development PC to the public Internet.**
+**Use WeChat to check ChatGPT Work, continue ChatGPT project conversations, and explicitly trigger read-only Codex analysis on your Windows PC.**
 
-ClawBridge is a lightweight, local-first bridge that turns WeChat ClawBot into a remote control and conversation channel for AI development running on your PC.
+```text
+WeChat → ClawBridge → ChatGPT Work / ChatGPT Web / Codex CLI
+```
 
-From your phone, you can:
+ClawBridge is a small, local-first bridge for developers who want a lightweight mobile entry point to AI work already running on their PC. It is deliberately not a general-purpose agent framework.
 
-- check local ChatGPT Work status and results;
-- continue discussing the current project with ChatGPT;
-- add lightweight local project, Git, and Work context when needed;
-- explicitly trigger read-only Codex analysis for a configured local repository;
-- receive brief completion notifications without exposing your full development environment to the public Internet.
+- **`/work` observes** local ChatGPT Work status and results.
+- **`/chat` discusses** the current project with ChatGPT and lightweight local context, but does not execute code changes.
+- **`/codex` explicitly analyzes** a configured repository with Codex CLI in a read-only sandbox.
+- Detailed work, source code, logs, and long outputs stay on the PC; ClawBridge does not require exposing the development machine directly to the public Internet.
 
-Detailed work, full reports, logs, source code, and runtime state stay on the PC.
+If you only want one part of the workflow, the other capabilities remain optional.
 
 > **Status: Alpha / Early Stage**  
 > The complete first-time setup flow is currently verified on Windows only. ClawBridge is still experimental and is not production-ready infrastructure. Tencent iLink / WeChat ClawBot is an external dependency whose account, session, binding, rate-limit, and delivery behavior may change independently of ClawBridge.
@@ -112,6 +113,14 @@ Confirm the CLI is available:
 ```powershell
 python -m clawbridge --help
 ```
+
+Run the non-destructive first-run check at any time:
+
+```powershell
+python -m clawbridge doctor
+```
+
+The doctor reports local setup gaps as `SETUP` rather than treating optional capabilities as failures. Use `python -m clawbridge chat-browser doctor` when you want to verify the ChatGPT browser session itself.
 
 ---
 
