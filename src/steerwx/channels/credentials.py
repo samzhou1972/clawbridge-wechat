@@ -6,8 +6,10 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 import keyring
+from steerwx.runtime import local_app_data
 
-SERVICE_NAME = "ClawBridge Weixin"
+SERVICE_NAME = "SteerWX Weixin"
+LEGACY_SERVICE_NAME = "ClawBridge Weixin"
 
 
 @dataclass(slots=True)
@@ -24,12 +26,7 @@ class CredentialStore:
 
     @staticmethod
     def _default_home() -> Path:
-        override = os.getenv("CLAWBRIDGE_HOME")
-        if override:
-            return Path(override)
-        if os.name == "nt" and os.getenv("LOCALAPPDATA"):
-            return Path(os.environ["LOCALAPPDATA"]) / "ClawBridge"
-        return Path.home() / ".clawbridge"
+        return local_app_data()
 
     def save(self, credentials: WeixinCredentials, bot_token: str) -> None:
         self.home.mkdir(parents=True, exist_ok=True)
@@ -45,6 +42,8 @@ class CredentialStore:
         raw = json.loads(self.metadata_path.read_text(encoding="utf-8"))
         credentials = WeixinCredentials(**raw)
         token = keyring.get_password(SERVICE_NAME, credentials.account_id)
+        if not token:
+            token = keyring.get_password(LEGACY_SERVICE_NAME, credentials.account_id)
         if not token:
             raise RuntimeError(
                 "Weixin metadata exists but its bot token is missing from the OS keyring."

@@ -1,4 +1,4 @@
-from clawbridge.channels.weixin import WeixinClient, safe_send_text
+from steerwx.channels.weixin import WeixinClient, safe_send_text
 
 
 class _Response:

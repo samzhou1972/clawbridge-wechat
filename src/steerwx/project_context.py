@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable
 
-from clawbridge.observers.work import WorkSnapshot, latest_work_for_project
+from steerwx.observers.work import WorkSnapshot, latest_work_for_project
 
 
 WORK_KEYWORDS = (
@@ -173,6 +173,6 @@ def build_project_context(
             git = f"Git context unavailable: {exc}"
             warnings.append(git)
         blocks.append(f"Git:\n{git}")
-    envelope = "[ClawBridge Local Facts]\n\n" + "\n\n".join(blocks)
+    envelope = "[SteerWX Local Facts]\n\n" + "\n\n".join(blocks)
     envelope += f"\n\n[User Message]\n{message}"
     return ProjectContext(project, root, selection, envelope, tuple(warnings))

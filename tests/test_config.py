@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from clawbridge.config import load_config, resolve_configured_project
+from steerwx.config import load_config, resolve_configured_project
 
 
 def test_config_defaults(monkeypatch, tmp_path) -> None:
@@ -11,7 +11,7 @@ def test_config_defaults(monkeypatch, tmp_path) -> None:
     assert config.code_root == Path(r"D:\code")
     assert config.chat.browser == "chrome"
     assert config.chat.headless is False
-    assert config.chat.profile_dir == tmp_path / "ClawBridge" / "browser" / "chrome-profile"
+    assert config.chat.profile_dir == tmp_path / "SteerWX" / "browser" / "chrome-profile"
 
 
 def test_config_toml_override(monkeypatch, tmp_path) -> None:

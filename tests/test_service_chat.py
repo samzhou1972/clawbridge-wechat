@@ -4,10 +4,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from clawbridge.config import AppConfig, ChatConfig
-from clawbridge.conversation import ConversationSession, RecentMessage, SessionStore
-from clawbridge.observers.work import WorkSnapshot
-from clawbridge import service
+from steerwx.config import AppConfig, ChatConfig
+from steerwx.conversation import ConversationService as CoreConversationService
+from steerwx.conversation import ConversationSession, RecentMessage, SessionStore, conversation_prompt
+from steerwx.observers.work import WorkSnapshot
+from steerwx import service
 
 
 class FakeClient:
@@ -37,9 +38,10 @@ def config(tmp_path, projects=None):
 @pytest.fixture(autouse=True)
 def isolated_chat(tmp_path, monkeypatch):
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
-    monkeypatch.setattr(service, "load_config", lambda: config(tmp_path))
+    monkeypatch.setattr(service, "load_config", lambda: config(tmp_path, {"demo": tmp_path}))
     monkeypatch.setattr(service, "_CHAT_EXECUTOR", ImmediateExecutor())
     monkeypatch.setattr(service, "WeixinClient", FakeClient)
+    SessionStore().save(ConversationSession(current_project="demo"))
     if service._CHAT_LOCK.locked():
         service._CHAT_LOCK.release()
     yield
@@ -65,10 +67,71 @@ def test_chat_usage_status_and_reset_do_not_start_browser(monkeypatch):
     status = handle("/chat status").sent[0]
     assert "demo" in status and "ACTIVE" in status and "1" in status
     reset = handle("/chat reset").sent[0]
-    assert "demo" in reset
+    assert "demo" in reset and "下一条" in reset
     saved = store.load()
     assert saved.current_project == "demo"
     assert saved.browser_thread_url is None and saved.recent_messages == []
+
+
+def test_first_chat_and_chat_after_reset_create_threads_without_rebinding(monkeypatch):
+    created = []
+
+    class Driver:
+        def __init__(self):
+            self.started = 0
+            self.opened = []
+            self.prompts = []
+            self.closed = False
+
+        def start_new_thread(self):
+            self.started += 1
+
+        def open_thread(self, url):
+            self.opened.append(url)
+
+        def send(self, prompt):
+            self.prompts.append(prompt)
+            return SimpleNamespace(text="answer")
+
+        def current_thread_url(self):
+            return f"https://chatgpt.com/c/new-{len(created)}"
+
+        def close(self):
+            self.closed = True
+
+    def conversation_factory(chat_config, *, store):
+        driver = Driver()
+        created.append(driver)
+        return CoreConversationService(chat_config, store=store, driver_factory=lambda cfg: driver)
+
+    monkeypatch.setattr(service, "ConversationService", conversation_factory)
+    monkeypatch.setattr(service, "prepare_message", lambda cfg, store, message: ("project prompt", None))
+    assert handle("/chat hello").sent == ["answer"]
+    saved = SessionStore().load()
+    assert saved.current_project == "demo"
+    assert saved.browser_thread_url == "https://chatgpt.com/c/new-1"
+    assert [(item.role, item.text) for item in saved.recent_messages] == [
+        ("user", "hello"), ("assistant", "answer"),
+    ]
+    assert created[0].started == 1 and created[0].opened == []
+    assert created[0].prompts == ["project prompt"] and created[0].closed
+
+    assert "下一条" in handle("/chat reset").sent[0]
+    reset = SessionStore().load()
+    assert reset.current_project == "demo"
+    assert reset.browser_thread_url is None and reset.recent_messages == []
+    assert handle("/chat again").sent == ["answer"]
+    assert created[1].started == 1 and created[1].opened == []
+    assert created[1].prompts == ["project prompt"] and created[1].closed
+    assert SessionStore().load().current_project == "demo"
+    assert SessionStore().load().browser_thread_url == "https://chatgpt.com/c/new-2"
+
+
+def test_chat_without_project_binding_prompts_before_browser(monkeypatch):
+    SessionStore().save(ConversationSession())
+    monkeypatch.setattr(service, "ConversationService", lambda *a, **k: pytest.fail("browser started"))
+    assert handle("/chat 项目进展？").sent == [service.CHAT_PROJECT_REQUIRED]
+    assert SessionStore().load().current_project is None
 
 
 def test_chat_use_preserves_thread_and_history(tmp_path, monkeypatch):
@@ -103,7 +166,7 @@ def test_chat_use_unknown_and_status_suffix_is_normal_message(monkeypatch):
     monkeypatch.setattr(service, "ConversationService", Conversation)
     handle("/chat status怎么样？", outbound)
     assert calls[0][0] == "status怎么样？"
-    assert "[ClawBridge Conversation Mode]" in calls[0][1]
+    assert "[SteerWX Conversation Mode]" in calls[0][1]
     assert outbound.sent == ["answer"]
 
 
@@ -124,6 +187,19 @@ def test_chat_calls_conversation_once_and_does_not_route_locally(monkeypatch):
     handle("/chat hello", outbound)
     assert calls == [("hello", "envelope")]
     assert outbound.sent == ["final only"]
+
+
+def test_recovered_chat_sends_one_notice_with_answer(monkeypatch):
+    class Conversation:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def send(self, message, *, prompt):
+            return SimpleNamespace(reply="answer", recovered=True)
+
+    monkeypatch.setattr(service, "ConversationService", Conversation)
+    outbound = handle("/chat hello")
+    assert outbound.sent == [service.CHAT_RECOVERY_NOTICE + "\n\nanswer"]
 
 
 @pytest.mark.parametrize("length", [100, 999, 1000, 1001])
@@ -288,6 +364,7 @@ def test_authorized_inbound_still_saves_route_and_routes_work(monkeypatch):
 ])
 def test_chat_execution_requests_stay_on_conversation_path(execution_request, monkeypatch):
     calls = {"conversation": 0, "codex": 0, "subprocess": 0}
+    monkeypatch.setattr(service, "prepare_message", lambda cfg, store, message: (conversation_prompt(message), None))
 
     class Conversation:
         def __init__(self, *args, **kwargs):
@@ -295,12 +372,12 @@ def test_chat_execution_requests_stay_on_conversation_path(execution_request, mo
 
         def send(self, message, *, prompt):
             calls["conversation"] += 1
-            assert "[ClawBridge Conversation Mode]" in prompt
+            assert "[SteerWX Conversation Mode]" in prompt
             return type("Result", (), {"reply": "【Codex 执行指令】\n如需执行，请通过显式 /codex 命令提交该任务。"})()
 
     monkeypatch.setattr(service, "ConversationService", Conversation)
     monkeypatch.setattr(service, "run_readonly", lambda *a, **k: calls.__setitem__("codex", 1))
-    monkeypatch.setattr("clawbridge.project_context.subprocess.run", lambda *a, **k: calls.__setitem__("subprocess", 1))
+    monkeypatch.setattr("steerwx.project_context.subprocess.run", lambda *a, **k: calls.__setitem__("subprocess", 1))
     outbound = FakeClient()
     handle(f"/chat {execution_request}", outbound)
     assert calls == {"conversation": 1, "codex": 0, "subprocess": 0}
@@ -343,7 +420,7 @@ class FakeRouteStore:
 
 def work_snapshot(tmp_path, state, result="very long result"):
     return WorkSnapshot(
-        session_id="session", turn_id="turn", cwd=r"D:\code\clawbridge",
+        session_id="session", turn_id="turn", cwd=r"D:\code\steerwx",
         state=state, started_at=1, completed_at=2 if state == "complete" else None,
         updated_at=2, last_message=result, result=result if state == "complete" else None,
         source_path=tmp_path / "rollout.jsonl",
@@ -372,7 +449,7 @@ def test_work_watch_defers_proactive_without_consuming_complete_marker(tmp_path,
     assert route_store.route.last_notified is None
 
     service._check_watch(client, "token", "base")
-    assert client.sent == ["项目：clawbridge\n任务：turn\n状态：完成"]
+    assert client.sent == ["项目：steerwx\n任务：turn\n状态：完成"]
     assert route_store.route.last_notified == snapshot.task_key
 
 
@@ -384,7 +461,7 @@ def test_work_watch_complete_is_short_idempotent_and_persistent(tmp_path, monkey
     monkeypatch.setattr(service, "latest_work", lambda: snapshot)
     service._check_watch(client, "token", "base")
     service._check_watch(client, "token", "base")
-    assert client.sent == ["项目：clawbridge\n任务：turn\n状态：完成"]
+    assert client.sent == ["项目：steerwx\n任务：turn\n状态：完成"]
     assert "result body" not in client.sent[0]
     assert route_store.route.last_notified == snapshot.task_key
     output = capsys.readouterr().out

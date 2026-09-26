@@ -1,3 +1,3 @@
-"""ClawBridge package."""
+"""Compatibility package for installations using the former module name."""
 
-__version__ = "0.1.1"
+from steerwx import __version__

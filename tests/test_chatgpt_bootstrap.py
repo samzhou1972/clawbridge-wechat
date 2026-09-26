@@ -2,12 +2,12 @@ from pathlib import Path
 
 import pytest
 
-from clawbridge.adapters.chatgpt_bootstrap import (
+from steerwx.adapters.chatgpt_bootstrap import (
     CHATGPT_URL,
     ChromeBootstrapError,
     launch_manual_login,
 )
-from clawbridge.config import ChatConfig
+from steerwx.config import ChatConfig
 
 
 def test_launches_normal_chrome_with_isolated_profile(tmp_path) -> None:

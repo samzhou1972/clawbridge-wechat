@@ -2,19 +2,17 @@ from __future__ import annotations
 
 import os
 import tomllib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-
-def local_app_data() -> Path:
-    return Path(os.getenv("LOCALAPPDATA", str(Path.home()))) / "ClawBridge"
+from steerwx.runtime import data_roots, local_app_data
 
 
 @dataclass(frozen=True, slots=True)
 class ChatConfig:
     browser: str = "chrome"
-    profile_dir: Path = local_app_data() / "browser" / "chrome-profile"
+    profile_dir: Path = field(default_factory=lambda: local_app_data() / "browser" / "chrome-profile")
     headless: bool = False
     startup_timeout_seconds: int = 30
     reply_timeout_seconds: int = 180
@@ -50,9 +48,7 @@ def _path(value: object, fallback: Path) -> Path:
 
 
 def load_config(path: Path | None = None) -> AppConfig:
-    config_path = path or Path(
-        os.getenv("CLAWBRIDGE_CONFIG", str(default_config_path()))
-    )
+    config_path = path or Path(os.getenv("STEERWX_CONFIG") or os.getenv("CLAWBRIDGE_CONFIG") or default_config_path())
     raw: dict[str, Any] = {}
     try:
         with config_path.open("rb") as handle:
@@ -68,12 +64,18 @@ def load_config(path: Path | None = None) -> AppConfig:
     projects_raw = raw.get("projects") if isinstance(raw.get("projects"), dict) else {}
     base = local_app_data()
     default_code_root = Path(r"D:\code")
-    code_root = _path(os.getenv("CLAWBRIDGE_CODE_ROOT", paths.get("code_root")), default_code_root)
+    code_root = _path(os.getenv("STEERWX_CODE_ROOT") or os.getenv("CLAWBRIDGE_CODE_ROOT") or paths.get("code_root"), default_code_root)
     profile_dir = _path(
-        os.getenv("CLAWBRIDGE_CHAT_PROFILE", chat.get("profile_dir")),
+        os.getenv("STEERWX_CHAT_PROFILE") or os.getenv("CLAWBRIDGE_CHAT_PROFILE") or chat.get("profile_dir"),
         base / "browser" / "chrome-profile",
     )
-    executable_value = os.getenv("CLAWBRIDGE_CODEX") or codex.get("executable")
+    # A copied legacy config may explicitly name the old default profile.
+    # Redirect only that exact default, leaving custom profile locations intact.
+    current_base, legacy_base = data_roots()
+    if (base == current_base and not (os.getenv("STEERWX_CHAT_PROFILE") or os.getenv("CLAWBRIDGE_CHAT_PROFILE"))
+            and str(profile_dir).lower() == str(legacy_base / "browser" / "chrome-profile").lower()):
+        profile_dir = current_base / "browser" / "chrome-profile"
+    executable_value = os.getenv("STEERWX_CODEX") or os.getenv("CLAWBRIDGE_CODEX") or codex.get("executable")
     executable = _path(executable_value, Path()) if executable_value else None
     project_paths: dict[str, Path] = {}
     for name, item in projects_raw.items():

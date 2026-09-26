@@ -3,13 +3,13 @@ import sys
 
 import pytest
 
-from clawbridge.adapters.chatgpt_playwright import (
+from steerwx.adapters.chatgpt_playwright import (
     ChatDriverError,
     ChatHealth,
     PlaywrightChatDriver,
 )
-from clawbridge.config import ChatConfig
-from clawbridge.cli import _chat_browser
+from steerwx.config import ChatConfig
+from steerwx.cli import _chat_browser
 
 
 class ScreenshotPage:
@@ -87,17 +87,25 @@ def test_doctor_output_maps_success_without_real_browser(tmp_path, monkeypatch, 
 
 
 class FakeItem:
-    def __init__(self, *, visible=True, editable=True, text=""):
+    def __init__(self, *, visible=True, editable=True, enabled=True, text=""):
         self.visible = visible
         self.editable = editable
+        self.enabled = enabled
         self.text = text
         self.inner_text_timeouts = []
+        self.click_count = 0
 
     def is_visible(self, timeout=0):
         return self.visible
 
     def is_editable(self, timeout=0):
         return self.editable
+
+    def is_enabled(self, timeout=0):
+        return self.enabled
+
+    def click(self):
+        self.click_count += 1
 
     def fill(self, value):
         self.value = value
@@ -171,9 +179,10 @@ def _driver_with_page(tmp_path, page, *, timeout=1, reply_timeout=180):
 
 def _send_ready_driver(tmp_path, monkeypatch, page, *, reply_timeout=180):
     driver = _driver_with_page(tmp_path, page, reply_timeout=reply_timeout)
+    page.mapping.setdefault(PlaywrightChatDriver.SEND_BUTTON, [FakeItem()])
     monkeypatch.setattr(driver, "ensure_ready", lambda: None)
     monkeypatch.setattr(
-        "clawbridge.adapters.chatgpt_playwright.time.monotonic", lambda: page.elapsed
+        "steerwx.adapters.chatgpt_playwright.time.monotonic", lambda: page.elapsed
     )
     return driver
 
@@ -193,8 +202,35 @@ def test_send_fast_response_uses_reply_deadline(tmp_path, monkeypatch) -> None:
     page.on_wait = reveal
     reply = _send_ready_driver(tmp_path, monkeypatch, page).send("hello")
     assert reply.text == "done"
+    assert page.mapping[PlaywrightChatDriver.SEND_BUTTON][0].click_count == 1
+    assert not hasattr(composer, "key")
     assert assistant.inner_text_timeouts
     assert 173_000 <= assistant.inner_text_timeouts[0] <= 175_000
+
+
+def test_new_chatgpt_assistant_structure_is_read(tmp_path, monkeypatch) -> None:
+    assistant = FakeItem(text="STEERWX_DOM_OK")
+    page = FakePage({
+        PlaywrightChatDriver.COMPOSERS[1]: [FakeItem()],
+        PlaywrightChatDriver.ASSISTANT_MESSAGES[-1]: [],
+    })
+    page.on_wait = lambda current: current.mapping.__setitem__(
+        PlaywrightChatDriver.ASSISTANT_MESSAGES[-1], [assistant]
+    )
+    reply = _send_ready_driver(tmp_path, monkeypatch, page).send("probe")
+    assert reply.text == "STEERWX_DOM_OK"
+
+
+def test_disabled_send_button_fails_without_dispatch(tmp_path, monkeypatch) -> None:
+    page = FakePage({
+        PlaywrightChatDriver.COMPOSERS[0]: [FakeItem()],
+        PlaywrightChatDriver.SEND_BUTTON: [FakeItem(enabled=False)],
+    })
+    driver = _send_ready_driver(tmp_path, monkeypatch, page)
+    with pytest.raises(ChatDriverError, match="SEND_BUTTON_DISABLED") as caught:
+        driver.send("hello")
+    assert caught.value.stage == "PROMPT_ENTERED"
+    assert page.mapping[PlaywrightChatDriver.SEND_BUTTON][0].click_count == 0
 
 
 def test_send_response_after_default_30_seconds_passes(tmp_path, monkeypatch) -> None:
@@ -317,7 +353,7 @@ def test_continuously_changing_text_reaches_reply_timeout(tmp_path, monkeypatch)
     driver = _send_ready_driver(tmp_path, monkeypatch, page, reply_timeout=2)
     with pytest.raises(ChatDriverError, match="REPLY_TIMEOUT"):
         driver.send("never stable")
-    payload = json.loads(next((tmp_path / "diagnostics").iterdir()).joinpath("error.json").read_text())
+    payload = json.loads(next((tmp_path / "diagnostics").iterdir()).joinpath("error.json").read_text(encoding="utf-8"))
     assert payload["final_text_length"] > 0
     assert payload["last_text_change_at"] is not None
     assert payload["text_stable_seconds"] < 2
@@ -332,7 +368,7 @@ def test_reply_timeout_is_business_error_with_diagnostics(tmp_path, monkeypatch)
     with pytest.raises(ChatDriverError, match="REPLY_TIMEOUT") as caught:
         driver.send("never answered")
     assert caught.value.stage == "PROMPT_SENT"
-    payload = json.loads(next((tmp_path / "diagnostics").iterdir()).joinpath("error.json").read_text())
+    payload = json.loads(next((tmp_path / "diagnostics").iterdir()).joinpath("error.json").read_text(encoding="utf-8"))
     assert payload["configured_reply_timeout_seconds"] == 2
     assert payload["elapsed_response_seconds"] >= 2
     assert payload["assistant_count_before"] == 0
@@ -361,7 +397,7 @@ def test_response_started_capture_timeout_is_business_error(tmp_path, monkeypatc
     with pytest.raises(ChatDriverError, match="REPLY_TIMEOUT") as caught:
         driver.send("started but never captured")
     assert caught.value.stage == "RESPONSE_STARTED"
-    payload = json.loads(next((tmp_path / "diagnostics").iterdir()).joinpath("error.json").read_text())
+    payload = json.loads(next((tmp_path / "diagnostics").iterdir()).joinpath("error.json").read_text(encoding="utf-8"))
     assert payload["response_started"] is True
     assert payload["assistant_count_before"] == 0
     assert payload["assistant_count_after"] == 1
@@ -372,6 +408,8 @@ def test_response_started_capture_timeout_is_business_error(tmp_path, monkeypatc
     ("mapping", "expected"),
     [
         ({PlaywrightChatDriver.ACCOUNT_MARKERS[0]: [FakeItem()]}, "PASS"),
+        ({PlaywrightChatDriver.ACCOUNT_MARKERS[-1]: [FakeItem()]}, "PASS"),
+        ({PlaywrightChatDriver.COMPOSERS[1]: [FakeItem()]}, "UNKNOWN"),
         ({PlaywrightChatDriver.LOGIN_MARKERS[0]: [FakeItem()]}, "FAIL"),
         ({}, "UNKNOWN"),
     ],
@@ -402,7 +440,7 @@ def test_readiness_waits_for_late_composer(tmp_path, monkeypatch) -> None:
 
     page = FakePage(mapping, reveal)
     driver = _driver_with_page(tmp_path, page)
-    monkeypatch.setattr("clawbridge.adapters.chatgpt_playwright.time.monotonic", lambda: page.elapsed)
+    monkeypatch.setattr("steerwx.adapters.chatgpt_playwright.time.monotonic", lambda: page.elapsed)
     health = driver.ensure_ready()
     assert page.wait_count == 1
     assert health.ready is True
@@ -415,11 +453,33 @@ def test_open_thread_ready_preserves_requested_url(tmp_path, monkeypatch) -> Non
         PlaywrightChatDriver.COMPOSERS[0]: [FakeItem()],
     })
     driver = _driver_with_page(tmp_path, page)
-    monkeypatch.setattr("clawbridge.adapters.chatgpt_playwright.time.monotonic", lambda: page.elapsed)
+    monkeypatch.setattr("steerwx.adapters.chatgpt_playwright.time.monotonic", lambda: page.elapsed)
     driver.open_thread(target)
     assert page.url == target
     assert driver._last_observation["requested_thread_url"] == target
     assert driver._last_observation["final_url"] == target
+
+
+@pytest.mark.parametrize("final_id,expected", [("existing", None), ("another", "THREAD_UNAVAILABLE")])
+def test_open_thread_project_route_redirect_uses_conversation_id(
+    tmp_path, monkeypatch, final_id, expected
+) -> None:
+    class ProjectRoutePage(FakePage):
+        def goto(self, url, wait_until=None):
+            self.url = f"https://chatgpt.com/g/g-p-project/c/{final_id}"
+
+    page = ProjectRoutePage({
+        PlaywrightChatDriver.ACCOUNT_MARKERS[-1]: [FakeItem()],
+        PlaywrightChatDriver.COMPOSERS[1]: [FakeItem()],
+    })
+    driver = _driver_with_page(tmp_path, page)
+    monkeypatch.setattr("steerwx.adapters.chatgpt_playwright.time.monotonic", lambda: page.elapsed)
+    if expected:
+        with pytest.raises(ChatDriverError, match=expected):
+            driver.open_thread("https://chatgpt.com/c/existing")
+    else:
+        driver.open_thread("https://chatgpt.com/c/existing")
+        assert driver.current_thread_url() == "https://chatgpt.com/c/existing"
 
 
 def test_open_thread_waits_for_late_composer_without_false_unavailable(tmp_path, monkeypatch) -> None:
@@ -429,7 +489,7 @@ def test_open_thread_waits_for_late_composer_without_false_unavailable(tmp_path,
         PlaywrightChatDriver.COMPOSERS[0], [FakeItem()]
     )
     driver = _driver_with_page(tmp_path, page)
-    monkeypatch.setattr("clawbridge.adapters.chatgpt_playwright.time.monotonic", lambda: page.elapsed)
+    monkeypatch.setattr("steerwx.adapters.chatgpt_playwright.time.monotonic", lambda: page.elapsed)
     driver.open_thread(target)
     assert driver.stage == "COMPOSER_FOUND"
 
@@ -440,11 +500,11 @@ def test_open_thread_timeout_without_unavailable_marker_is_page_ready_timeout(
     target = "https://chatgpt.com/c/existing"
     page = FakePage({PlaywrightChatDriver.ACCOUNT_MARKERS[0]: [FakeItem()]})
     driver = _driver_with_page(tmp_path, page)
-    monkeypatch.setattr("clawbridge.adapters.chatgpt_playwright.time.monotonic", lambda: page.elapsed)
+    monkeypatch.setattr("steerwx.adapters.chatgpt_playwright.time.monotonic", lambda: page.elapsed)
     with pytest.raises(ChatDriverError, match="PAGE_READY_TIMEOUT"):
         driver.open_thread(target)
     payloads = [
-        json.loads(path.read_text())
+        json.loads(path.read_text(encoding="utf-8"))
         for path in (tmp_path / "diagnostics").glob("*/error.json")
     ]
     payload = payloads[-1]
@@ -459,9 +519,41 @@ def test_open_thread_explicit_unavailable_marker_is_thread_unavailable(
 ) -> None:
     page = FakePage({PlaywrightChatDriver.UNAVAILABLE_MARKERS[0]: [FakeItem()]})
     driver = _driver_with_page(tmp_path, page)
-    monkeypatch.setattr("clawbridge.adapters.chatgpt_playwright.time.monotonic", lambda: page.elapsed)
+    monkeypatch.setattr("steerwx.adapters.chatgpt_playwright.time.monotonic", lambda: page.elapsed)
     with pytest.raises(ChatDriverError, match="THREAD_UNAVAILABLE"):
         driver.open_thread("https://chatgpt.com/c/missing")
+
+
+@pytest.mark.parametrize("marker", PlaywrightChatDriver.THREAD_NOT_FOUND_MARKERS)
+def test_open_thread_authenticated_not_found_is_distinct(tmp_path, monkeypatch, marker) -> None:
+    page = FakePage({
+        PlaywrightChatDriver.ACCOUNT_MARKERS[0]: [FakeItem()],
+        marker: [FakeItem()],
+    })
+    driver = _driver_with_page(tmp_path, page)
+    monkeypatch.setattr("steerwx.adapters.chatgpt_playwright.time.monotonic", lambda: page.elapsed)
+    with pytest.raises(ChatDriverError, match="THREAD_NOT_FOUND"):
+        driver.open_thread("https://chatgpt.com/c/missing")
+
+
+def test_open_thread_not_found_marker_without_auth_is_not_recoverable(tmp_path, monkeypatch) -> None:
+    page = FakePage({PlaywrightChatDriver.THREAD_NOT_FOUND_MARKERS[0]: [FakeItem()]})
+    driver = _driver_with_page(tmp_path, page)
+    monkeypatch.setattr("steerwx.adapters.chatgpt_playwright.time.monotonic", lambda: page.elapsed)
+    with pytest.raises(ChatDriverError, match="THREAD_UNAVAILABLE"):
+        driver.open_thread("https://chatgpt.com/c/missing")
+
+
+def test_open_thread_not_found_text_inside_ready_thread_is_not_recoverable(tmp_path, monkeypatch) -> None:
+    page = FakePage({
+        PlaywrightChatDriver.ACCOUNT_MARKERS[0]: [FakeItem()],
+        PlaywrightChatDriver.COMPOSERS[0]: [FakeItem()],
+        PlaywrightChatDriver.THREAD_NOT_FOUND_MARKERS[0]: [FakeItem()],
+    })
+    driver = _driver_with_page(tmp_path, page)
+    monkeypatch.setattr("steerwx.adapters.chatgpt_playwright.time.monotonic", lambda: page.elapsed)
+    with pytest.raises(ChatDriverError, match="THREAD_UNAVAILABLE"):
+        driver.open_thread("https://chatgpt.com/c/existing")
 
 
 def test_open_thread_unavailable_marker_wins_even_if_composer_exists(
@@ -473,7 +565,7 @@ def test_open_thread_unavailable_marker_wins_even_if_composer_exists(
         PlaywrightChatDriver.UNAVAILABLE_MARKERS[0]: [FakeItem()],
     })
     driver = _driver_with_page(tmp_path, page)
-    monkeypatch.setattr("clawbridge.adapters.chatgpt_playwright.time.monotonic", lambda: page.elapsed)
+    monkeypatch.setattr("steerwx.adapters.chatgpt_playwright.time.monotonic", lambda: page.elapsed)
     with pytest.raises(ChatDriverError, match="THREAD_UNAVAILABLE"):
         driver.open_thread("https://chatgpt.com/c/missing")
 
@@ -488,7 +580,7 @@ def test_open_thread_redirect_to_new_chat_is_thread_unavailable(tmp_path, monkey
         PlaywrightChatDriver.COMPOSERS[0]: [FakeItem()],
     })
     driver = _driver_with_page(tmp_path, page)
-    monkeypatch.setattr("clawbridge.adapters.chatgpt_playwright.time.monotonic", lambda: page.elapsed)
+    monkeypatch.setattr("steerwx.adapters.chatgpt_playwright.time.monotonic", lambda: page.elapsed)
     with pytest.raises(ChatDriverError, match="THREAD_UNAVAILABLE"):
         driver.open_thread("https://chatgpt.com/c/missing")
 
@@ -496,11 +588,11 @@ def test_open_thread_redirect_to_new_chat_is_thread_unavailable(tmp_path, monkey
 def test_missing_composer_does_not_become_auth_fail(tmp_path, monkeypatch) -> None:
     page = FakePage()
     driver = _driver_with_page(tmp_path, page)
-    monkeypatch.setattr("clawbridge.adapters.chatgpt_playwright.time.monotonic", lambda: page.elapsed)
+    monkeypatch.setattr("steerwx.adapters.chatgpt_playwright.time.monotonic", lambda: page.elapsed)
     health = driver.health()
     assert health.auth_state == "UNKNOWN"
     assert health.composer_found is False
-    payload = json.loads(next((tmp_path / "diagnostics").iterdir()).joinpath("error.json").read_text())
+    payload = json.loads(next((tmp_path / "diagnostics").iterdir()).joinpath("error.json").read_text(encoding="utf-8"))
     assert payload["auth_state"] == "UNKNOWN"
     assert set(payload["composer_selectors"]) == set(PlaywrightChatDriver.COMPOSERS)
 
@@ -529,20 +621,20 @@ def test_keep_open_is_explicit(tmp_path, monkeypatch, capsys) -> None:
 
 def test_setup_does_not_import_playwright_driver(tmp_path, monkeypatch, capsys) -> None:
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
-    monkeypatch.delitem(sys.modules, "clawbridge.adapters.chatgpt_playwright", raising=False)
+    monkeypatch.delitem(sys.modules, "steerwx.adapters.chatgpt_playwright", raising=False)
     launched = []
     monkeypatch.setattr(
-        "clawbridge.adapters.chatgpt_bootstrap.find_chrome_executable",
+        "steerwx.adapters.chatgpt_bootstrap.find_chrome_executable",
         lambda configured_browser="chrome": tmp_path / "chrome.exe",
     )
     monkeypatch.setattr(
-        "clawbridge.adapters.chatgpt_bootstrap.subprocess.Popen",
+        "steerwx.adapters.chatgpt_bootstrap.subprocess.Popen",
         lambda command: launched.append(command),
     )
 
     assert _chat_browser(True) == 0
-    assert "clawbridge.adapters.chatgpt_playwright" not in sys.modules
+    assert "steerwx.adapters.chatgpt_playwright" not in sys.modules
     assert launched[0][0] == str(tmp_path / "chrome.exe")
-    assert f"--user-data-dir={tmp_path / 'ClawBridge' / 'browser' / 'chrome-profile'}" in launched[0]
+    assert f"--user-data-dir={tmp_path / 'SteerWX' / 'browser' / 'chrome-profile'}" in launched[0]
     assert "https://chatgpt.com/" in launched[0]
-    assert "python -m clawbridge chat-browser doctor" in capsys.readouterr().out
+    assert "python -m steerwx chat-browser doctor" in capsys.readouterr().out

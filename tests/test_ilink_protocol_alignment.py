@@ -3,8 +3,8 @@ from types import SimpleNamespace
 import pytest
 import requests
 
-from clawbridge import cli
-from clawbridge.channels.weixin import (
+from steerwx import cli
+from steerwx.channels.weixin import (
     API_BASE,
     ILinkStaleTokenError,
     LoginResult,

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -9,14 +10,14 @@ from typing import Callable, Protocol
 from urllib.parse import urlsplit, urlunsplit
 from uuid import uuid4
 
-from clawbridge.config import AppConfig, ChatConfig, local_app_data
-from clawbridge.project_context import ProjectContext, build_project_context
+from steerwx.config import AppConfig, ChatConfig, local_app_data
+from steerwx.project_context import ProjectContext, build_project_context
 
 
 MAX_RECENT_MESSAGES = 24
 CHAT_REPLY_SOFT_CHARS = 850
 
-CONVERSATION_MODE_POLICY = f"""[ClawBridge Conversation Mode]
+CONVERSATION_MODE_POLICY = f"""[SteerWX Conversation Mode]
 
 This channel is discussion/read-only.
 
@@ -57,17 +58,21 @@ def utc_now() -> str:
 
 def normalize_thread_url(value: str) -> str:
     parts = urlsplit(value)
+    path = parts.path
+    project_thread = re.fullmatch(r"/g/[^/]+/c/([^/]+)", path)
+    if project_thread:
+        path = f"/c/{project_thread.group(1)}"
     if (
         parts.scheme != "https"
         or parts.hostname != "chatgpt.com"
         or parts.port is not None
         or parts.username is not None
         or parts.password is not None
-        or not parts.path.startswith("/c/")
-        or parts.path == "/c/"
+        or not path.startswith("/c/")
+        or path == "/c/"
     ):
         raise ValueError("Thread URL must be https://chatgpt.com/c/...")
-    return urlunsplit(("https", "chatgpt.com", parts.path, "", ""))
+    return urlunsplit(("https", "chatgpt.com", path, "", ""))
 
 
 @dataclass(frozen=True, slots=True)
@@ -154,6 +159,7 @@ class ConversationResult:
     reply: str
     thread_url: str
     resumed: bool
+    recovered: bool = False
 
 
 class ConversationService:
@@ -170,7 +176,7 @@ class ConversationService:
 
     @staticmethod
     def _default_driver(config: ChatConfig) -> ConversationDriver:
-        from clawbridge.adapters.chatgpt_playwright import PlaywrightChatDriver
+        from steerwx.adapters.chatgpt_playwright import PlaywrightChatDriver
         return PlaywrightChatDriver(config)
 
     def send(self, message: str, *, prompt: str | None = None) -> ConversationResult:
@@ -181,18 +187,27 @@ class ConversationService:
         if not outbound:
             raise ValueError("Prompt must not be empty")
         original = self.store.load()
-        resumed = original.browser_thread_url is not None
+        recovered = False
         driver = self.driver_factory(self.chat_config)
         try:
             if original.browser_thread_url:
-                driver.open_thread(original.browser_thread_url)
+                try:
+                    driver.open_thread(original.browser_thread_url)
+                except Exception as exc:
+                    from steerwx.adapters.chatgpt_playwright import ChatDriverError
+                    if not (isinstance(exc, ChatDriverError)
+                            and exc.stage == "PAGE_READY"
+                            and exc.reason == "THREAD_NOT_FOUND"):
+                        raise
+                    driver.start_new_thread()
+                    recovered = True
             else:
                 driver.start_new_thread()
             reply = driver.send(outbound)
             thread_url = driver.current_thread_url()
             now = utc_now()
             messages = [
-                *original.recent_messages,
+                *(original.recent_messages if not recovered else []),
                 RecentMessage("user", clean, now),
                 RecentMessage("assistant", reply.text, utc_now()),
             ][-MAX_RECENT_MESSAGES:]
@@ -201,11 +216,11 @@ class ConversationService:
                 current_project=original.current_project,
                 browser_thread_url=thread_url,
                 recent_messages=messages,
-                created_at=original.created_at,
+                created_at=now if recovered else original.created_at,
                 updated_at=utc_now(),
             )
             self.store.save(updated)
-            return ConversationResult(reply.text, thread_url, resumed)
+            return ConversationResult(reply.text, thread_url, bool(original.browser_thread_url) and not recovered, recovered)
         finally:
             driver.close()
 

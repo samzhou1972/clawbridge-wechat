@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from clawbridge.observers.work import (
+from steerwx.observers.work import (
     format_result,
     format_status,
     latest_work,
@@ -102,13 +102,13 @@ def test_latest_work_for_project_skips_newer_other_project(tmp_path: Path) -> No
     matching = tmp_path / "2026" / "08" / "25" / "rollout-match.jsonl"
     for path, session, cwd in (
         (other, "other", r"D:\code\other"),
-        (matching, "match", r"D:\code\clawbridge"),
+        (matching, "match", r"D:\code\steerwx"),
     ):
         _write_rollout(path, [{
             "type": "session_meta",
             "payload": {"session_id": session, "originator": "codex_work_desktop", "cwd": cwd},
         }])
     other.touch()
-    snapshot = latest_work_for_project(Path(r"D:\code\clawbridge"), tmp_path)
+    snapshot = latest_work_for_project(Path(r"D:\code\steerwx"), tmp_path)
     assert snapshot is not None
     assert snapshot.session_id == "match"

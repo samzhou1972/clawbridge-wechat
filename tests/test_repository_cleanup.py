@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_deprecated_extension_route_is_absent() -> None:
     for relative in (
         "extension",
-        "src/clawbridge/adapters/chatgpt_web.py",
+        "src/steerwx/adapters/chatgpt_web.py",
         "tests/test_chatgpt_web.py",
         "tests/chatgpt_background_test.js",
         "tests/chatgpt_content_test.js",

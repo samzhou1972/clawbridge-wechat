@@ -1,5 +1,3 @@
-"""Keep ``python -m clawbridge`` working during the 0.2 transition."""
-
 from steerwx.cli import main
 
 

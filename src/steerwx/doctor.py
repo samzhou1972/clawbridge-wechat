@@ -4,10 +4,11 @@ import sys
 from pathlib import Path
 from typing import TextIO
 
-from clawbridge.adapters.chatgpt_bootstrap import find_chrome_executable
-from clawbridge.adapters.codex import find_codex
-from clawbridge.channels.credentials import CredentialStore
-from clawbridge.config import AppConfig, load_config
+from steerwx.adapters.chatgpt_bootstrap import find_chrome_executable
+from steerwx.adapters.codex import find_codex
+from steerwx.channels.credentials import CredentialStore
+from steerwx.config import AppConfig, load_config
+from steerwx.runtime import data_roots, local_app_data
 
 
 def _emit(stream: TextIO, label: str, status: str, detail: str) -> None:
@@ -19,12 +20,16 @@ def run_doctor(
     *,
     stream: TextIO | None = None,
 ) -> int:
-    """Run non-destructive first-run checks for optional ClawBridge capabilities."""
+    """Run non-destructive first-run checks for optional SteerWX capabilities."""
     stream = stream or sys.stdout
     config = config or load_config()
     errors = 0
 
-    print("ClawBridge doctor", file=stream)
+    print("SteerWX doctor", file=stream)
+    print(f"Runtime data           {local_app_data()}", file=stream)
+    current, legacy = data_roots()
+    if local_app_data() == legacy and not current.exists():
+        print("Migration              legacy data in use; run 'python -m steerwx migrate-data' after stopping the service", file=stream)
     print(f"Config path            {config.config_path}", file=stream)
 
     if config.config_path.exists():
@@ -51,7 +56,7 @@ def run_doctor(
         if bound:
             _emit(stream, "WeChat binding", "PASS", "credentials available")
         else:
-            _emit(stream, "WeChat binding", "SETUP", "run clawbridge login")
+            _emit(stream, "WeChat binding", "SETUP", "run python -m steerwx login")
 
     try:
         chrome = find_chrome_executable(config.chat.browser)
@@ -65,10 +70,10 @@ def run_doctor(
             stream,
             "ChatGPT profile",
             "PASS",
-            "found; use 'clawbridge chat-browser doctor' to verify login",
+            "found; use 'python -m steerwx chat-browser doctor' to verify login",
         )
     else:
-        _emit(stream, "ChatGPT profile", "SETUP", "run clawbridge chat-browser setup")
+        _emit(stream, "ChatGPT profile", "SETUP", "run python -m steerwx chat-browser setup")
 
     try:
         codex = find_codex()

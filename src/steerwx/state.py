@@ -6,9 +6,10 @@ from pathlib import Path
 
 import keyring
 
-from clawbridge.channels.credentials import CredentialStore
+from steerwx.channels.credentials import CredentialStore
 
-ROUTE_SERVICE = "ClawBridge Route"
+ROUTE_SERVICE = "SteerWX Route"
+LEGACY_ROUTE_SERVICE = "ClawBridge Route"
 
 
 @dataclass(slots=True)
@@ -42,7 +43,8 @@ class RouteStore:
         selected = route or self.load_route()
         if selected is None:
             return None
-        return keyring.get_password(ROUTE_SERVICE, selected.user_id)
+        return (keyring.get_password(ROUTE_SERVICE, selected.user_id)
+                or keyring.get_password(LEGACY_ROUTE_SERVICE, selected.user_id))
 
     def set_watch(self, enabled: bool, baseline: str | None) -> ReplyRoute | None:
         route = self.load_route()

@@ -1,8 +1,8 @@
 from pathlib import Path
 
-from clawbridge import doctor
-from clawbridge.channels.credentials import WeixinCredentials
-from clawbridge.config import load_config
+from steerwx import doctor
+from steerwx.channels.credentials import WeixinCredentials
+from steerwx.config import load_config
 
 
 def _raise(message: str):

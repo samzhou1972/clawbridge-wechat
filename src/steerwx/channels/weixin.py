@@ -33,8 +33,8 @@ def bound_outbound_text(text: str, limit: int = WEIXIN_MAX_OUTBOUND_CHARS) -> st
 API_BASE = "https://ilinkai.weixin.qq.com"
 BOT_TYPE = "3"
 APP_ID = "bot"
-CHANNEL_VERSION = "0.1.0"
-BOT_AGENT = "ClawBridge/0.1.0"
+CHANNEL_VERSION = "0.2.0"
+BOT_AGENT = "SteerWX/0.2.0"
 STALE_TOKEN_ERRCODE = -14
 
 
@@ -196,7 +196,7 @@ class WeixinClient:
     ) -> str:
         if len(text) > WEIXIN_MAX_OUTBOUND_CHARS:
             raise ValueError("WeChat outbound text exceeds 1000 characters")
-        client_id = f"clawbridge-{secrets.token_hex(12)}"
+        client_id = f"steerwx-{secrets.token_hex(12)}"
         self.last_send_diagnostics = {"client_id": client_id}
         body = {
             "msg": {

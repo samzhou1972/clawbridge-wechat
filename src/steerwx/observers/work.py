@@ -29,7 +29,7 @@ class WorkSnapshot:
 
 
 def default_sessions_root() -> Path:
-    override = os.getenv("CLAWBRIDGE_CODEX_SESSIONS")
+    override = os.getenv("STEERWX_CODEX_SESSIONS") or os.getenv("CLAWBRIDGE_CODEX_SESSIONS")
     if override:
         return Path(override)
     return Path.home() / ".codex" / "sessions"

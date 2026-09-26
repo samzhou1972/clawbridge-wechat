@@ -2,7 +2,7 @@
 
 ## Project purpose
 
-ClawBridge is a lightweight bridge between WeChat ClawBot and local AI workspaces. It is not an agent framework.
+SteerWX is a lightweight bridge between WeChat ClawBot and local AI workspaces. It is not an agent framework.
 
 ## Required reading
 

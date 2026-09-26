@@ -1,26 +1,30 @@
-# ClawBridge for WeChat
+# SteerWX
+
+**Continue your ChatGPT and Codex work from WeChat.**
+
+*A lightweight WeChat companion for ChatGPT and Codex on your PC.*
 
 **English** | [简体中文](README.zh-CN.md)
 
-**Use WeChat to check ChatGPT Work, continue ChatGPT project conversations, and explicitly trigger read-only Codex analysis on your Windows PC.**
+After leaving your computer, use WeChat to check ChatGPT Work status and results, continue the current project's ChatGPT conversation, and explicitly request local read-only Codex analysis when needed. No extra phone app is required. SteerWX runs on your own Windows PC; source code, logs, and long outputs stay there.
 
 ```text
-WeChat → ClawBridge → ChatGPT Work / ChatGPT Web / Codex CLI
+WeChat → SteerWX → ChatGPT Work / ChatGPT Web / Codex CLI
 ```
 
-ClawBridge is a small, local-first bridge for developers who want a lightweight mobile entry point to AI work already running on their PC. It is deliberately not a general-purpose agent framework.
+Your ChatGPT, Codex, network, and regional access requirements still apply.
 
 - **`/work` observes** local ChatGPT Work status and results.
 - **`/chat` discusses** the current project with ChatGPT and lightweight local context, but does not execute code changes.
 - **`/codex` explicitly analyzes** a configured repository with Codex CLI in a read-only sandbox.
-- Detailed work, source code, logs, and long outputs stay on the PC; ClawBridge does not require exposing the development machine directly to the public Internet.
+- Detailed work, source code, logs, and long outputs stay on the PC; SteerWX does not require exposing the development machine directly to the public Internet.
 
 If you only want one part of the workflow, the other capabilities remain optional.
 
-> **Status: Alpha / Early Stage**  
-> The complete first-time setup flow is currently verified on Windows only. ClawBridge is still experimental and is not production-ready infrastructure. Tencent iLink / WeChat ClawBot is an external dependency whose account, session, binding, rate-limit, and delivery behavior may change independently of ClawBridge.
+> **Status: v0.2.0 Alpha / Early Stage**
+> The complete first-time setup flow is currently verified on Windows only. SteerWX is still experimental and is not production-ready infrastructure. Tencent iLink / WeChat ClawBot is an external dependency whose account, session, binding, rate-limit, and delivery behavior may change independently of SteerWX.
 
-ClawBridge is an independent open-source project and is not affiliated with, authorized by, or endorsed by Tencent, WeChat, or OpenAI.
+SteerWX is an independent open-source project and is not affiliated with, authorized by, or endorsed by Tencent, WeChat, or OpenAI.
 
 ---
 
@@ -29,7 +33,7 @@ ClawBridge is an independent open-source project and is not affiliated with, aut
 Ask about the local project directly from WeChat:
 
 <p align="center">
-  <img src="docs/images/clawbridge-wechat-chat-overview.jpg" alt="ClawBridge WeChat /chat demo" width="430">
+  <img src="docs/images/steerwx-wechat-chat-overview.jpg" alt="SteerWX WeChat /chat demo" width="430">
 </p>
 
 For example:
@@ -38,16 +42,16 @@ For example:
 /chat What problem does this project solve?
 ```
 
-ClawBridge keeps the conversation tied to the current project context instead of treating every WeChat message as a completely unrelated request.
+SteerWX keeps the conversation tied to the current project context instead of treating every WeChat message as a completely unrelated request.
 
 ---
 
-## What can ClawBridge do?
+## What can SteerWX do?
 
 ```text
 WeChat ClawBot
       ↕
-  ClawBridge
+  SteerWX
       ├─ /work  → local ChatGPT Work status
       ├─ /chat  → ChatGPT Web + project context
       └─ /codex → local Codex CLI (read-only analysis)
@@ -63,7 +67,7 @@ The command boundary is deliberate:
 
 A `/chat` message that asks to modify code, run tests, commit, or deploy **does not automatically perform those actions**.
 
-ClawBridge is intentionally not a general-purpose agent framework. It does not provide model routing, RAG, long-term memory, or workflow orchestration, and it does not depend on QClaw or OpenClaw.
+SteerWX is intentionally not a general-purpose agent framework. It does not provide model routing, RAG, long-term memory, or workflow orchestration, and it does not depend on QClaw or OpenClaw.
 
 ---
 
@@ -87,20 +91,20 @@ Prepare only the dependencies required by the capabilities you plan to use:
 
 - Python 3.11 or later;
 - Google Chrome, for the dedicated ChatGPT Web profile;
-- a ChatGPT Web account, only for `/chat` — ClawBridge **does not use the OpenAI API**;
+- a ChatGPT Web account, only for `/chat` — SteerWX **does not use the OpenAI API**;
 - WeChat and Tencent iLink / WeChat ClawBot, for WeChat transport;
 - Codex CLI, with its own authentication/configuration complete, only for `/codex`;
 - Git CLI and a Git repository, only for Git Context;
 - one or more local project directories;
 - locally accessible ChatGPT Work state, only for Work Observer.
 
-Cloning the repository and running `python -m clawbridge run` does not automatically enable every capability. For example, `/work` does not require ChatGPT Browser, while `/chat` does.
+Cloning the repository and running `python -m steerwx run` does not automatically enable every capability. For example, `/work` does not require ChatGPT Browser, while `/chat` does.
 
 ---
 
 # First-time setup
 
-## 1. Install ClawBridge
+## 1. Install SteerWX
 
 ```powershell
 git clone https://github.com/samzhou1972/clawbridge-wechat.git
@@ -111,16 +115,16 @@ python -m pip install -e .
 Confirm the CLI is available:
 
 ```powershell
-python -m clawbridge --help
+python -m steerwx --help
 ```
 
 Run the non-destructive first-run check at any time:
 
 ```powershell
-python -m clawbridge doctor
+python -m steerwx doctor
 ```
 
-The doctor reports local setup gaps as `SETUP` rather than treating optional capabilities as failures. Use `python -m clawbridge chat-browser doctor` when you want to verify the ChatGPT browser session itself.
+The doctor reports local setup gaps as `SETUP` rather than treating optional capabilities as failures. Use `python -m steerwx chat-browser doctor` when you want to verify the ChatGPT browser session itself.
 
 ---
 
@@ -129,19 +133,19 @@ The doctor reports local setup gaps as `SETUP` rather than treating optional cap
 Runtime configuration is stored at:
 
 ```text
-%LOCALAPPDATA%\ClawBridge\config.toml
+%LOCALAPPDATA%\SteerWX\config.toml
 ```
 
-Copy `config.example.toml` to that location, then explicitly configure every project ClawBridge may use:
+Copy `config.example.toml` to that location, then explicitly configure every project SteerWX may use:
 
 ```toml
-[projects.clawbridge]
-root = "C:\\path\\to\\clawbridge"
+[projects.steerwx]
+root = "C:\\path\\to\\steerwx"
 ```
 
 Here:
 
-- `clawbridge` is the logical project name;
+- `steerwx` is the logical project name;
 - `root` is the real local directory.
 
 `[projects.<name>].root` is the sole project-path authority for `/chat` context, Git Context, Work matching, and `/codex`.
@@ -149,23 +153,25 @@ Here:
 From WeChat:
 
 ```text
-/chat use clawbridge
+/chat use steerwx
 ```
 
 selects that configured project.
 
-ClawBridge does not scan the disk to guess your projects. Do not commit personal runtime configuration, credentials, or browser profiles to Git.
+The first ordinary `/chat ...` message starts a ChatGPT conversation automatically. SteerWX keeps its conversation state internally; you do not need to create, copy, or bind a ChatGPT conversation URL.
+
+SteerWX does not scan the disk to guess your projects. Do not commit personal runtime configuration, credentials, or browser profiles to Git.
 
 ---
 
 ## 3. Bind WeChat ClawBot
 
-ClawBridge uses Tencent iLink / WeChat ClawBot as its transport layer rather than a normal WeChat Web API.
+SteerWX uses Tencent iLink / WeChat ClawBot as its transport layer rather than a normal WeChat Web API.
 
 Start the binding flow:
 
 ```powershell
-python -m clawbridge login
+python -m steerwx login
 ```
 
 The terminal requests and displays a binding QR code. Then:
@@ -182,7 +188,7 @@ The terminal requests and displays a binding QR code. Then:
 Run the minimal transport smoke test:
 
 ```powershell
-python -m clawbridge echo
+python -m steerwx echo
 ```
 
 Then send this to WeChat ClawBot:
@@ -200,7 +206,7 @@ world
 This verifies only:
 
 ```text
-WeChat ↔ Tencent iLink ↔ ClawBridge
+WeChat ↔ Tencent iLink ↔ SteerWX
 ```
 
 Complete this step before diagnosing ChatGPT, Work, or Codex.
@@ -211,16 +217,16 @@ Complete this step before diagnosing ChatGPT, Work, or Codex.
 
 ## 5. Prepare the ChatGPT browser session
 
-ClawBridge uses a dedicated Chrome profile:
+SteerWX uses a dedicated Chrome profile:
 
 ```text
-%LOCALAPPDATA%\ClawBridge\browser\chrome-profile
+%LOCALAPPDATA%\SteerWX\browser\chrome-profile
 ```
 
 Run the one-time login setup:
 
 ```powershell
-python -m clawbridge chat-browser setup
+python -m steerwx chat-browser setup
 ```
 
 This launches normal system Chrome with the dedicated profile.
@@ -233,9 +239,9 @@ In the opened browser:
 
 The authenticated session remains in the dedicated profile.
 
-ClawBridge never asks for, collects, or stores your ChatGPT password.
+SteerWX never asks for, collects, or stores your ChatGPT password.
 
-> Being signed in to your everyday Chrome or Edge does not mean the ClawBridge profile is signed in. ClawBridge does not use your daily Edge profile or a browser extension.
+> Being signed in to your everyday Chrome or Edge does not mean the SteerWX profile is signed in. SteerWX does not use your daily Edge profile or a browser extension.
 
 ---
 
@@ -244,7 +250,7 @@ ClawBridge never asks for, collects, or stores your ChatGPT password.
 After closing the login browser, run:
 
 ```powershell
-python -m clawbridge chat-browser doctor
+python -m steerwx chat-browser doctor
 ```
 
 A ready environment reports `PASS` for the browser and ChatGPT readiness checks.
@@ -252,13 +258,13 @@ A ready environment reports `PASS` for the browser and ChatGPT readiness checks.
 Then run the end-to-end browser check:
 
 ```powershell
-python -m clawbridge chat-browser doctor --send
+python -m steerwx chat-browser doctor --send
 ```
 
 On success:
 
 ```text
-CLAWBRIDGE_BROWSER_OK
+STEERWX_BROWSER_OK
 ```
 
 For first-time setup, use the doctor command before diagnosing `/chat` itself.
@@ -269,43 +275,41 @@ For first-time setup, use the doctor command before diagnosing `/chat` itself.
 
 If you want to use `/codex`, install and authenticate Codex CLI separately.
 
-ClawBridge explicitly runs configured projects in a read-only sandbox:
+SteerWX explicitly runs configured projects in a read-only sandbox:
 
 ```text
 codex exec --sandbox read-only
 ```
 
-ClawBridge does not provide a Codex/OpenAI account and does not silently route ordinary `/chat` messages into Codex execution.
+SteerWX does not provide a Codex/OpenAI account and does not silently route ordinary `/chat` messages into Codex execution.
 
 ---
 
-## 8. Start ClawBridge
+## 8. Start SteerWX
 
 ```powershell
-python -m clawbridge run
+python -m steerwx run
 ```
 
 This starts the long-running bridge process.
 
-If the PowerShell window stops, ClawBridge stops too. If WeChat no longer receives replies, first confirm that the bridge process is still running.
+If the PowerShell window stops, SteerWX stops too. If WeChat no longer receives replies, first confirm that the bridge process is still running.
 
 ---
 
 ## Quick setup checklist
 
-For a first installation using all current capabilities:
+To start using `/chat`:
 
-1. clone and install ClawBridge;
-2. create `%LOCALAPPDATA%\ClawBridge\config.toml` and configure at least one project;
-3. run `python -m clawbridge login`;
-4. run `python -m clawbridge echo`, send `hello` in WeChat, and expect `world`;
-5. run `python -m clawbridge chat-browser setup` and sign in to ChatGPT;
-6. close that Chrome window;
-7. run `python -m clawbridge chat-browser doctor`;
-8. run `python -m clawbridge chat-browser doctor --send`;
-9. confirm Codex CLI if you plan to use `/codex`;
-10. run `python -m clawbridge run`;
-11. try `/work status`, `/chat status`, and `/chat use clawbridge` from WeChat.
+1. Clone and install SteerWX.
+2. Configure at least one local project in `%LOCALAPPDATA%\SteerWX\config.toml`.
+3. Bind WeChat with `python -m steerwx login`.
+4. Prepare the dedicated Chrome profile with `python -m steerwx chat-browser setup`, sign in to ChatGPT, then close that Chrome window.
+5. Start SteerWX with `python -m steerwx run`.
+6. In WeChat, send `/chat use <project>` (for example, `/chat use steerwx`).
+7. Send an ordinary `/chat ...` message. SteerWX creates and manages the ChatGPT conversation automatically.
+
+If a step fails, use `python -m steerwx echo` to check WeChat transport and `python -m steerwx chat-browser doctor` to check browser readiness. `doctor --send` is an optional browser test. Codex CLI is needed only for explicit `/codex` requests.
 
 ---
 
@@ -319,10 +323,10 @@ For a first installation using all current capabilities:
 | `/work watch` | Enable one brief notification when a whole task first reaches `COMPLETE` |
 | `/work unwatch` | Disable Work completion notifications |
 | `/codex <project> <task>` | Explicitly start read-only Codex analysis for a configured project |
-| `/chat use <project>` | Bind the configured project to the default ChatGPT session |
+| `/chat use <project>` | Select the configured local project for future `/chat` messages |
 | `/chat <message>` | Discuss or analyze with ChatGPT; it does not execute code changes |
 | `/chat status` | Show local chat-session status |
-| `/chat reset` | Reset ChatGPT thread/history while keeping the project binding |
+| `/chat reset` | End the current ChatGPT conversation, keep the project, and start a new conversation on the next `/chat` |
 
 ---
 
@@ -331,7 +335,7 @@ For a first installation using all current capabilities:
 A `/chat` conversation can continue across messages and keep the selected project context:
 
 <p align="center">
-  <img src="docs/images/clawbridge-wechat-chat-details.jpg" alt="ClawBridge longer WeChat conversation example" width="430">
+  <img src="docs/images/steerwx-wechat-chat-details.jpg" alt="SteerWX longer WeChat conversation example" width="430">
 </p>
 
 The intended workflow is simple:
@@ -351,7 +355,7 @@ Current policy:
 - automatic multipart / numbered-message chunking is disabled;
 - `/chat` asks ChatGPT for a short summary by default;
 - a Codex handoff of 1000 characters or fewer is provided in full;
-- a Codex handoff over 1000 characters is neither truncated nor split; ClawBridge sends a notice to continue on the PC;
+- a Codex handoff over 1000 characters is neither truncated nor split; SteerWX sends a notice to continue on the PC;
 - full reports, logs, tracebacks, test output, and detailed development work stay on the PC;
 - a proactive Work notification is sent only when a whole task first reaches `COMPLETE`, and remains intentionally brief.
 
@@ -362,8 +366,21 @@ Current policy:
 Local runtime state lives under:
 
 ```text
-%LOCALAPPDATA%\ClawBridge
+%LOCALAPPDATA%\SteerWX
 ```
+
+### Upgrading from ClawBridge
+
+Version 0.2.0 still accepts `python -m clawbridge` and the old `clawbridge` command. Use `python -m steerwx` for new instructions. Existing `%LOCALAPPDATA%\ClawBridge` data is used automatically while `%LOCALAPPDATA%\SteerWX` does not exist, so the existing configuration, Chrome profile, chat session, WeChat/iLink metadata, and route state remain available. Legacy `CLAWBRIDGE_*` environment variables and existing OS keyring entries are also read.
+
+To copy local data into the new directory, first stop the service and close its dedicated Chrome window, then run:
+
+```powershell
+python -m steerwx migrate-data
+python -m steerwx doctor
+```
+
+The copy keeps the old directory, refuses to overwrite an existing SteerWX directory, and stops if Chrome profile lock markers are present. A copied config that names the old default Chrome profile is resolved to its copy under SteerWX; custom profile paths are kept. If you set `CLAWBRIDGE_HOME`, `CLAWBRIDGE_CONFIG`, or `CLAWBRIDGE_CHAT_PROFILE`, review those explicit overrides after copying. If `SteerWX.migrating` remains after an interrupted copy, inspect it before retrying. Do not delete the old directory until the new installation has been verified locally. This migration does not change your configured project names or project roots.
 
 It may contain:
 
@@ -381,15 +398,15 @@ ChatGPT login data stays in the dedicated Chrome profile. The iLink token is sto
 
 # External service limitations
 
-Tencent iLink / WeChat ClawBot is an external transport service. Tencent controls availability, rate limits, message volume/frequency, session and context validity, binding state, and actual client delivery behavior. These may change independently of ClawBridge.
+Tencent iLink / WeChat ClawBot is an external transport service. Tencent controls availability, rate limits, message volume/frequency, session and context validity, binding state, and actual client delivery behavior. These may change independently of SteerWX.
 
 In particular:
 
 - Tencent does not publish a stable fixed rate-limit threshold for this use case, so do not rely on a permanent “N messages per minute” rule;
-- short bursts or frequent outbound messages may be limited, which is why ClawBridge uses short messages and low-frequency proactive notifications;
+- short bursts or frequent outbound messages may be limited, which is why SteerWX uses short messages and low-frequency proactive notifications;
 - `sendmessage ret=0` or similar API acceptance only means that the server accepted the request — it does not guarantee delivery to the WeChat client;
-- ClawBridge records such calls as `ACCEPTED_UNCONFIRMED` and does not densely auto-retry delivery that has not been confirmed;
-- supervised real WeChat E2E delivery has been verified, but account-specific binding or client-delivery anomalies may still occur independently of ClawBridge.
+- SteerWX records such calls as `ACCEPTED_UNCONFIRMED` and does not densely auto-retry delivery that has not been confirmed;
+- supervised real WeChat E2E delivery has been verified, but account-specific binding or client-delivery anomalies may still occur independently of SteerWX.
 
 ---
 
@@ -398,7 +415,7 @@ In particular:
 ```text
 WeChat ClawBot
       ↕
-ClawBridge Core
+SteerWX Core
       ├─ M1 Work Observer
       ├─ M2 Codex Executor
       └─ M3 Conversation Core
@@ -416,12 +433,12 @@ It waits for a new assistant response, stable non-empty text, and the correspond
 The default session stores its canonical ChatGPT `/c/...` URL and up to 24 recent audit messages at:
 
 ```text
-%LOCALAPPDATA%\ClawBridge\chat\session.json
+%LOCALAPPDATA%\SteerWX\chat\session.json
 ```
 
 Later runs reopen that exact thread.
 
-ClawBridge does not search the ChatGPT sidebar, inject artificial history, or silently replace an unavailable thread with another one.
+If an authenticated ChatGPT page explicitly confirms that the saved thread was not found or is inaccessible, SteerWX creates one new conversation, keeps the project binding, and sends the current `/chat` message once. Other browser, login, network, and ambiguous page failures still stop with an error. SteerWX does not search the ChatGPT sidebar or inject artificial history.
 
 ## M3-C: Lightweight project context
 
@@ -467,9 +484,9 @@ This is still an early-stage project. In particular, the WeChat transport depend
 
 ---
 
-# Why ClawBridge exists
+# Why SteerWX exists
 
-ClawBridge solves a very specific problem:
+SteerWX solves a very specific problem:
 
 > Once development work increasingly depends on ChatGPT, Codex, and local AI tools, how can you leave the computer and still know what is happening, continue the discussion, and explicitly trigger local analysis when needed?
 
@@ -477,7 +494,7 @@ The answer here is not another full remote IDE, and it is not exposing the devel
 
 WeChat is already on the phone.
 
-ClawBridge therefore uses it as a lightweight entry point:
+SteerWX therefore uses it as a lightweight entry point:
 
 **use `/chat` to discuss, `/work` to observe, and `/codex` only when local analysis is explicitly required.**
 
@@ -498,6 +515,6 @@ Before contributing, please read:
 
 # License
 
-ClawBridge is released under the [MIT License](LICENSE).
+SteerWX is released under the [MIT License](LICENSE).
 
-If ClawBridge is useful to you, a ⭐ Star helps other developers with the same problem discover the project.
+If SteerWX is useful to you, a ⭐ Star helps other developers with the same problem discover the project.

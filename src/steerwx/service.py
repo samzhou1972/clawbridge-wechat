@@ -9,9 +9,9 @@ from uuid import uuid4
 
 import requests
 
-from clawbridge.adapters.codex import run_readonly
-from clawbridge.channels.credentials import CredentialStore
-from clawbridge.channels.weixin import (
+from steerwx.adapters.codex import run_readonly
+from steerwx.channels.credentials import CredentialStore
+from steerwx.channels.weixin import (
     ILinkStaleTokenError,
     WEIXIN_MAX_OUTBOUND_CHARS,
     WeixinClient,
@@ -19,25 +19,27 @@ from clawbridge.channels.weixin import (
     extract_text,
     safe_send_text,
 )
-from clawbridge.config import load_config
-from clawbridge.conversation import ConversationService, SessionStore, bind_project, prepare_message
-from clawbridge.observers.work import (
+from steerwx.config import load_config
+from steerwx.conversation import ConversationService, SessionStore, bind_project, prepare_message
+from steerwx.observers.work import (
     WorkSnapshot,
     format_last,
     format_result,
     format_status,
     latest_work,
 )
-from clawbridge.state import RouteStore
+from steerwx.state import RouteStore
 
-_CODEX_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="clawbridge-codex")
+_CODEX_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="steerwx-codex")
 _CODEX_LOCK = Lock()
-_CHAT_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="clawbridge-chat")
+_CHAT_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="steerwx-chat")
 _CHAT_LOCK = Lock()
 _SEEN_MESSAGE_IDS: set[str] = set()
 _SEEN_MESSAGE_ORDER: deque[str] = deque()
 _MAX_SEEN_MESSAGE_IDS = 512
 CODEX_HANDOFF_MARKER = "【Codex 执行指令】"
+CHAT_RECOVERY_NOTICE = "原 ChatGPT 对话已不可用，已创建新对话并继续当前项目。"
+CHAT_PROJECT_REQUIRED = "尚未绑定项目。请先发送 `/chat use <project>`，再发送普通 `/chat ...`。"
 CODEX_HANDOFF_COMPLEXITY_MESSAGE = (
     "这个任务的执行约束较多，完整 Codex 指令会超过微信端长度限制。\n\n"
     "为避免遗漏关键约束，本次不生成精简版 handoff。建议回到 PC 端继续该开发任务。"
@@ -87,7 +89,7 @@ def _send_chat_text(client, token, base_url, sender, context, text, *, purpose) 
 def _chat_error_message(exc: Exception) -> str:
     detail = f"{getattr(exc, 'stage', '')} {exc}".upper()
     if "PROJECT_NOT_CONFIGURED" in detail:
-        return "项目未配置，请先检查 ClawBridge config。"
+        return "项目未配置，请先检查 SteerWX config。"
     if "PROJECT_ROOT_NOT_FOUND" in detail:
         return "项目目录不存在或不可访问。"
     if "THREAD_UNAVAILABLE" in detail:
@@ -96,9 +98,11 @@ def _chat_error_message(exc: Exception) -> str:
         return "ChatGPT 页面暂时未准备好，请稍后重试。"
     if "REPLY_TIMEOUT" in detail:
         return "ChatGPT 回复超时，请稍后重试。"
+    if "SEND_BUTTON_DISABLED" in detail:
+        return "当前 ChatGPT 对话无法发送。请在电脑端检查；如需开始新对话，可执行 `/chat reset`。"
     if any(value in detail for value in ("BROWSER", "LOGIN", "AUTH")):
-        return "ChatGPT 浏览器不可用，请在开发机检查：\npython -m clawbridge chat-browser doctor"
-    return "ChatGPT 请求失败，请查看 ClawBridge diagnostics。"
+        return "ChatGPT 浏览器不可用，请在开发机检查：\npython -m steerwx chat-browser doctor"
+    return "ChatGPT 请求失败，请查看 SteerWX diagnostics。"
 
 
 def _handle_chat(
@@ -130,7 +134,11 @@ def _handle_chat(
             _send_chat_text(client, token, base_url, sender, context, "当前已有 ChatGPT 请求正在处理，请稍后再试。", purpose="chat_busy")
             return
         session = store.reset()
-        _send_chat_text(client, token, base_url, sender, context, f"Chat conversation reset.\nCurrent project: {session.current_project or 'NONE'}", purpose="chat_reset")
+        _send_chat_text(
+            client, token, base_url, sender, context,
+            f"已结束当前 ChatGPT 对话。\n当前项目：{session.current_project or 'NONE'}\n下一条 `/chat` 将自动开始新对话。",
+            purpose="chat_reset",
+        )
         return
     if lower.startswith("/chat use "):
         if _CHAT_LOCK.locked():
@@ -148,6 +156,9 @@ def _handle_chat(
         _send_chat_text(client, token, base_url, sender, context, usage, purpose="chat_usage")
         return
     message = stripped[len("/chat "):].strip()
+    if not store.load().current_project:
+        _send_chat_text(client, token, base_url, sender, context, CHAT_PROJECT_REQUIRED, purpose="chat_project_required")
+        return
     if not _CHAT_LOCK.acquire(blocking=False):
         _send_chat_text(client, token, base_url, sender, context, "当前已有 ChatGPT 请求正在处理，请稍后再试。", purpose="chat_busy")
         return
@@ -159,7 +170,8 @@ def _handle_chat(
             providers = ",".join(context_result.selection.names) if context_result else "NONE"
             print(f"[chat] inbound_id={inbound_id or 'UNAVAILABLE'} request_id={request_id} session=default project={store.load().current_project or 'NONE'} providers={providers} stage=START", flush=True)
             result = ConversationService(config.chat, store=store).send(message, prompt=prompt)
-            sent = _send_chat_text(client, token, base_url, sender, context, result.reply, purpose="chat_reply")
+            reply = f"{CHAT_RECOVERY_NOTICE}\n\n{result.reply}" if getattr(result, "recovered", False) else result.reply
+            sent = _send_chat_text(client, token, base_url, sender, context, reply, purpose="chat_reply")
             state = "ACCEPTED_UNCONFIRMED" if sent else "CHAT_COMPLETED_OUTBOUND_FAILED"
             print(f"[chat] request_id={request_id} stage=COMPLETE result={state}", flush=True)
         except Exception as exc:
@@ -318,14 +330,14 @@ def _check_watch(
 def run_bridge() -> int:
     loaded = CredentialStore().load()
     if not loaded:
-        raise RuntimeError("尚未登录，请先执行 clawbridge login。")
+        raise RuntimeError("尚未登录，请先执行 python -m steerwx login。")
     credentials, token = loaded
     client = WeixinClient()
     outbound_client = WeixinClient()
     route_store = RouteStore()
 
     cursor = ""
-    print("ClawBridge 已启动。微信可使用 /work、/codex、/chat。")
+    print("SteerWX 已启动。微信可使用 /work、/codex、/chat。")
     client.notify_start(token, credentials.base_url)
     try:
         while True:

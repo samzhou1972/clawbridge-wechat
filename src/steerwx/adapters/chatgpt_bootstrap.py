@@ -5,7 +5,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from clawbridge.config import ChatConfig
+from steerwx.config import ChatConfig
 
 
 CHATGPT_URL = "https://chatgpt.com/"
@@ -57,7 +57,7 @@ def launch_manual_login(
         )
     if _profile_in_use(config.profile_dir):
         raise ChromeBootstrapError(
-            "ClawBridge Chrome profile 正在使用，请先关闭该专用 Chrome 后重试。"
+            "SteerWX Chrome profile 正在使用，请先关闭该专用 Chrome 后重试。"
         )
 
     config.profile_dir.mkdir(parents=True, exist_ok=True)

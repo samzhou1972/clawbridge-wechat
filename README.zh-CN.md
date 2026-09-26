@@ -1,26 +1,30 @@
-# ClawBridge for WeChat
+# SteerWX
+
+**在微信里继续电脑上的 ChatGPT 和 Codex 工作。**
+
+*部署在个人电脑上的轻量微信伴侣。*
 
 [English](README.md) | **简体中文**
 
 **通过微信查看 ChatGPT Work、继续讨论本地项目，并显式触发本机 Codex 只读分析。**
 
 ```text
-微信 → ClawBridge → ChatGPT Work / ChatGPT Web / Codex CLI
+微信 → SteerWX → ChatGPT Work / ChatGPT Web / Codex CLI
 ```
 
-ClawBridge 是一个轻量、local-first 的桥接工具，面向已经在电脑上使用 ChatGPT 和 Codex 的开发者。它提供一个手机端入口，但并不试图成为“大而全”的 Agent Framework。
+离开电脑后，你仍可在微信中查看 ChatGPT Work 的状态与结果，继续当前项目的 ChatGPT 对话，必要时显式触发本地 Codex 只读分析。手机无需安装额外 App。SteerWX 运行在你自己的 Windows PC 上；源码、日志和长输出留在电脑。使用 ChatGPT 和 Codex 仍须满足各自的地区、账号与网络访问要求。
 
 - **`/work` 负责观察**：查看本地 ChatGPT Work 的状态与结果；
 - **`/chat` 负责讨论**：结合轻量本地上下文继续和 ChatGPT 讨论项目，但不会执行代码修改；
 - **`/codex` 负责显式分析**：只有明确调用时，才在配置好的项目上启动 Codex CLI 只读分析；
-- 详细工作、源码、日志与长输出仍留在电脑上，ClawBridge 不要求把开发机直接暴露到公网。
+- 详细工作、源码、日志与长输出仍留在电脑上，SteerWX 不要求把开发机直接暴露到公网。
 
 你只需要其中一部分能力时，其余能力可以保持未配置状态。
 
-> **项目状态：Alpha / Early Stage**  
-> 当前完整首次安装流程只在 Windows 上完成验证。ClawBridge 仍处于早期阶段，不建议作为生产级基础设施使用。腾讯 iLink / 微信 ClawBot 属于外部依赖，其账号、会话、绑定、限频和消息投递行为可能独立变化。
+> **项目状态：v0.2.0 Alpha / Early Stage**
+> 当前完整首次安装流程只在 Windows 上完成验证。SteerWX 仍处于早期阶段，不建议作为生产级基础设施使用。腾讯 iLink / 微信 ClawBot 属于外部依赖，其账号、会话、绑定、限频和消息投递行为可能独立变化。
 
-ClawBridge 是独立开源项目，与腾讯、微信或 OpenAI 均无隶属、授权或背书关系。
+SteerWX 是独立开源项目，与腾讯、微信或 OpenAI 均无隶属、授权或背书关系。
 
 ---
 
@@ -29,7 +33,7 @@ ClawBridge 是独立开源项目，与腾讯、微信或 OpenAI 均无隶属、�
 在微信中，可以直接围绕当前本地项目继续讨论：
 
 <p align="center">
-  <img src="docs/images/clawbridge-wechat-chat-overview.jpg" alt="ClawBridge 微信 /chat 实际效果" width="430">
+  <img src="docs/images/steerwx-wechat-chat-overview.jpg" alt="SteerWX 微信 /chat 实际效果" width="430">
 </p>
 
 例如：
@@ -38,12 +42,12 @@ ClawBridge 是独立开源项目，与腾讯、微信或 OpenAI 均无隶属、�
 /chat 这个项目主要解决什么问题？
 ```
 
-ClawBridge 会让 ChatGPT 在当前项目上下文中回答，而不是把每条微信消息都当成一次完全独立、无上下文的新请求。
+SteerWX 会让 ChatGPT 在当前项目上下文中回答，而不是把每条微信消息都当成一次完全独立、无上下文的新请求。
 
 更完整的回答示例：
 
 <p align="center">
-  <img src="docs/images/clawbridge-wechat-chat-details.jpg" alt="ClawBridge 微信对话详细效果" width="430">
+  <img src="docs/images/steerwx-wechat-chat-details.jpg" alt="SteerWX 微信对话详细效果" width="430">
 </p>
 
 ---
@@ -53,7 +57,7 @@ ClawBridge 会让 ChatGPT 在当前项目上下文中回答，而不是把每条
 ```text
 微信 ClawBot
      ↕
- ClawBridge
+ SteerWX
      ├─ /work  → 本地 ChatGPT Work 状态
      ├─ /chat  → ChatGPT Web + 项目上下文
      └─ /codex → 本机 Codex CLI（只读分析）
@@ -61,7 +65,7 @@ ClawBridge 会让 ChatGPT 在当前项目上下文中回答，而不是把每条
                  本地项目
 ```
 
-ClawBridge 有意保持明确的命令边界：
+SteerWX 有意保持明确的命令边界：
 
 - **`/work` 负责观察**：读取本地 Work 的事实、状态和结果；
 - **`/chat` 负责讨论**：和 ChatGPT 分析问题、讨论方案、准备 Codex handoff；
@@ -69,7 +73,7 @@ ClawBridge 有意保持明确的命令边界：
 
 `/chat` 中即使出现“修改代码”“运行测试”“提交代码”或“部署”等内容，也**不会自动执行这些动作**。
 
-ClawBridge 不是一个“大而全”的 Agent Framework。它不提供模型路由、RAG、长期记忆或通用工作流编排，也不依赖 QClaw 或 OpenClaw。
+SteerWX 不是一个“大而全”的 Agent Framework。它不提供模型路由、RAG、长期记忆或通用工作流编排，也不依赖 QClaw 或 OpenClaw。
 
 ---
 
@@ -93,14 +97,14 @@ ClawBridge 不是一个“大而全”的 Agent Framework。它不提供模型�
 
 - Python 3.11 或更高版本；
 - Google Chrome：用于独立的 ChatGPT Web Profile；
-- ChatGPT Web 账号：仅 `/chat` 需要，ClawBridge **不使用 OpenAI API**；
+- ChatGPT Web 账号：仅 `/chat` 需要，SteerWX **不使用 OpenAI API**；
 - 微信与腾讯 iLink / 微信 ClawBot：用于微信传输；
 - Codex CLI：仅 `/codex` 需要，并需提前完成它自己的认证和配置；
 - Git CLI 与 Git 仓库：仅 Git Context 需要；
 - 一个或多个本地项目目录；
 - 本地可访问的 ChatGPT Work 状态：仅 Work Observer 需要。
 
-仅仅 Clone 仓库并运行 `python -m clawbridge run`，并不会自动启用全部能力。例如 `/work` 不依赖 ChatGPT Browser，而 `/chat` 需要。
+仅仅 Clone 仓库并运行 `python -m steerwx run`，并不会自动启用全部能力。例如 `/work` 不依赖 ChatGPT Browser，而 `/chat` 需要。
 
 ---
 
@@ -108,7 +112,7 @@ ClawBridge 不是一个“大而全”的 Agent Framework。它不提供模型�
 
 下面是一套启用当前全部主要能力的首次安装路径。
 
-## 1. 安装 ClawBridge
+## 1. 安装 SteerWX
 
 ```powershell
 git clone https://github.com/samzhou1972/clawbridge-wechat.git
@@ -119,16 +123,16 @@ python -m pip install -e .
 先确认 CLI 可用：
 
 ```powershell
-python -m clawbridge --help
+python -m steerwx --help
 ```
 
 任何时候都可以运行下面的非破坏性首次安装检查：
 
 ```powershell
-python -m clawbridge doctor
+python -m steerwx doctor
 ```
 
-Doctor 会把尚未配置的可选能力显示为 `SETUP`，而不是直接判定失败。如果要进一步验证 ChatGPT 浏览器登录状态，再运行 `python -m clawbridge chat-browser doctor`。
+Doctor 会把尚未配置的可选能力显示为 `SETUP`，而不是直接判定失败。如果要进一步验证 ChatGPT 浏览器登录状态，再运行 `python -m steerwx chat-browser doctor`。
 
 ---
 
@@ -137,19 +141,19 @@ Doctor 会把尚未配置的可选能力显示为 `SETUP`，而不是直接判�
 运行时配置位于：
 
 ```text
-%LOCALAPPDATA%\ClawBridge\config.toml
+%LOCALAPPDATA%\SteerWX\config.toml
 ```
 
-将仓库中的 `config.example.toml` 复制到这个位置，然后显式配置允许 ClawBridge 使用的项目：
+将仓库中的 `config.example.toml` 复制到这个位置，然后显式配置允许 SteerWX 使用的项目：
 
 ```toml
-[projects.clawbridge]
-root = "C:\\path\\to\\clawbridge"
+[projects.steerwx]
+root = "C:\\path\\to\\steerwx"
 ```
 
 这里：
 
-- `clawbridge` 是逻辑项目名；
+- `steerwx` 是逻辑项目名；
 - `root` 是真实本地目录。
 
 `[projects.<name>].root` 是 `/chat` 项目上下文、Git Context、Work 匹配和 `/codex` 的唯一项目路径依据。
@@ -157,23 +161,25 @@ root = "C:\\path\\to\\clawbridge"
 在微信中：
 
 ```text
-/chat use clawbridge
+/chat use steerwx
 ```
 
 即可选择这个项目。
 
-ClawBridge 不会扫描整块磁盘来猜测你的项目，也不要把个人运行配置、凭据或浏览器 Profile 提交到 Git。
+之后直接发送普通 `/chat ...` 即可；SteerWX 会自动创建并管理 ChatGPT 对话。用户不需要创建、复制或手工绑定 ChatGPT 对话 URL。
+
+SteerWX 不会扫描整块磁盘来猜测你的项目，也不要把个人运行配置、凭据或浏览器 Profile 提交到 Git。
 
 ---
 
 ## 3. 绑定微信 ClawBot
 
-ClawBridge 使用腾讯 iLink / 微信 ClawBot 作为传输层，而不是普通的 WeChat Web API。
+SteerWX 使用腾讯 iLink / 微信 ClawBot 作为传输层，而不是普通的 WeChat Web API。
 
 开始绑定：
 
 ```powershell
-python -m clawbridge login
+python -m steerwx login
 ```
 
 终端会请求并显示绑定二维码。然后：
@@ -190,7 +196,7 @@ python -m clawbridge login
 先运行最小 M0 smoke test：
 
 ```powershell
-python -m clawbridge echo
+python -m steerwx echo
 ```
 
 然后在微信 ClawBot 中发送：
@@ -208,7 +214,7 @@ world
 这一步只验证：
 
 ```text
-微信 ↔ 腾讯 iLink ↔ ClawBridge
+微信 ↔ 腾讯 iLink ↔ SteerWX
 ```
 
 建议先确保它正常，再排查 ChatGPT、Work 或 Codex。
@@ -219,16 +225,16 @@ world
 
 ## 5. 准备 ChatGPT Browser
 
-ClawBridge 使用独立的 Chrome Profile：
+SteerWX 使用独立的 Chrome Profile：
 
 ```text
-%LOCALAPPDATA%\ClawBridge\browser\chrome-profile
+%LOCALAPPDATA%\SteerWX\browser\chrome-profile
 ```
 
 执行一次登录初始化：
 
 ```powershell
-python -m clawbridge chat-browser setup
+python -m steerwx chat-browser setup
 ```
 
 该命令会使用上述 Profile 启动系统 Chrome。
@@ -241,9 +247,9 @@ python -m clawbridge chat-browser setup
 
 登录状态会保存在这个独立 Profile 中。
 
-ClawBridge 不会要求、收集或保存你的 ChatGPT 密码。
+SteerWX 不会要求、收集或保存你的 ChatGPT 密码。
 
-> 你平时使用的 Chrome 或 Edge 已经登录 ChatGPT，并不代表 ClawBridge 的独立 Profile 已登录。ClawBridge 不使用你的日常 Edge Profile，也不依赖浏览器扩展。
+> 你平时使用的 Chrome 或 Edge 已经登录 ChatGPT，并不代表 SteerWX 的独立 Profile 已登录。SteerWX 不使用你的日常 Edge Profile，也不依赖浏览器扩展。
 
 ---
 
@@ -252,7 +258,7 @@ ClawBridge 不会要求、收集或保存你的 ChatGPT 密码。
 关闭刚才用于登录的 Chrome 后运行：
 
 ```powershell
-python -m clawbridge chat-browser doctor
+python -m steerwx chat-browser doctor
 ```
 
 环境正常时，Chrome executable、Profile directory、browser launch、ChatGPT reachability、ChatGPT session、page readiness 和 composer 等检查应显示 `PASS`。
@@ -260,13 +266,13 @@ python -m clawbridge chat-browser doctor
 然后执行端到端检查：
 
 ```powershell
-python -m clawbridge chat-browser doctor --send
+python -m steerwx chat-browser doctor --send
 ```
 
 成功时会返回：
 
 ```text
-CLAWBRIDGE_BROWSER_OK
+STEERWX_BROWSER_OK
 ```
 
 首次配置时，不建议直接拿 `/chat` 当浏览器诊断工具。
@@ -277,23 +283,23 @@ CLAWBRIDGE_BROWSER_OK
 
 如果你需要 `/codex`，请单独安装并完成 Codex CLI 自身的认证与配置。
 
-ClawBridge 的 `/codex` 会对已配置项目显式运行只读分析：
+SteerWX 的 `/codex` 会对已配置项目显式运行只读分析：
 
 ```text
 codex exec --sandbox read-only
 ```
 
-ClawBridge 不提供 Codex/OpenAI 账号，也不会把 `/chat` 中的普通讨论隐式转成 `/codex` 执行。
+SteerWX 不提供 Codex/OpenAI 账号，也不会把 `/chat` 中的普通讨论隐式转成 `/codex` 执行。
 
 ---
 
-## 8. 启动 ClawBridge
+## 8. 启动 SteerWX
 
 ```powershell
-python -m clawbridge run
+python -m steerwx run
 ```
 
-这是一个持续运行的 Bridge 进程。PowerShell 窗口停止后，ClawBridge 也会停止。
+这是一个持续运行的 Bridge 进程。PowerShell 窗口停止后，SteerWX 也会停止。
 
 如果微信没有收到回复，首先确认这个进程仍在运行。
 
@@ -301,19 +307,17 @@ python -m clawbridge run
 
 ## 首次安装检查清单
 
-如果你希望启用当前全部主要能力，可以按下面顺序检查：
+开始使用 `/chat`：
 
-1. Clone 并安装 ClawBridge；
-2. 创建 `%LOCALAPPDATA%\ClawBridge\config.toml` 并配置项目；
-3. 运行 `python -m clawbridge login`；
-4. 运行 `python -m clawbridge echo`，微信发送 `hello`，确认收到 `world`；
-5. 运行 `python -m clawbridge chat-browser setup`，在独立 Chrome 中登录 ChatGPT；
-6. 关闭该 Chrome；
-7. 运行 `python -m clawbridge chat-browser doctor`；
-8. 运行 `python -m clawbridge chat-browser doctor --send`；
-9. 如果需要 `/codex`，确认 Codex CLI 已配置可用；
-10. 运行 `python -m clawbridge run`；
-11. 在微信中尝试 `/work status`、`/chat status` 和 `/chat use clawbridge`。
+1. 安装 SteerWX；
+2. 在 `%LOCALAPPDATA%\SteerWX\config.toml` 中配置至少一个本地项目；
+3. 运行 `python -m steerwx login` 绑定微信；
+4. 运行 `python -m steerwx chat-browser setup`，在专用 Chrome 中登录 ChatGPT，然后关闭该窗口；
+5. 运行 `python -m steerwx run`；
+6. 在微信中发送 `/chat use <project>`，例如 `/chat use steerwx`；
+7. 直接发送普通 `/chat ...`；SteerWX 会自动创建并管理 ChatGPT 对话。
+
+如遇问题，可用 `python -m steerwx echo` 检查微信传输，用 `python -m steerwx chat-browser doctor` 检查浏览器。`doctor --send` 是可选的浏览器测试；只有显式使用 `/codex` 才需要配置 Codex CLI。
 
 ---
 
@@ -327,16 +331,16 @@ python -m clawbridge run
 | `/work watch` | 当一个完整任务首次进入 `COMPLETE` 时发送一次简短通知 |
 | `/work unwatch` | 关闭 Work 完成通知 |
 | `/codex <project> <task>` | 对已配置项目显式启动只读 Codex 分析 |
-| `/chat use <project>` | 将项目绑定到默认 ChatGPT 会话 |
+| `/chat use <project>` | 为后续 `/chat` 选择已配置的本地项目 |
 | `/chat <message>` | 和 ChatGPT 讨论或分析，不执行代码修改 |
 | `/chat status` | 查看本地 Chat Session 状态 |
-| `/chat reset` | 重置 ChatGPT thread/history，但保留项目绑定 |
+| `/chat reset` | 结束当前 ChatGPT 对话，保留项目绑定；下一条 `/chat` 自动开始新对话 |
 
 ---
 
 # 微信消息策略
 
-ClawBridge 把微信定位为：
+SteerWX 把微信定位为：
 
 **控制入口 + 短摘要 + 完成提醒**
 
@@ -357,11 +361,24 @@ ClawBridge 把微信定位为：
 
 # 本地数据与凭据
 
-ClawBridge 的本地运行状态位于：
+SteerWX 的本地运行状态位于：
 
 ```text
-%LOCALAPPDATA%\ClawBridge
+%LOCALAPPDATA%\SteerWX
 ```
+
+### 从 ClawBridge 升级
+
+v0.2.0 仍支持 `python -m clawbridge` 和旧的 `clawbridge` 命令；新文档以 `python -m steerwx` 为标准入口。若 `%LOCALAPPDATA%\SteerWX` 不存在，会继续使用已有的 `%LOCALAPPDATA%\ClawBridge`，包括配置、Chrome Profile、对话 session、微信/iLink 元数据和路由状态。旧 `CLAWBRIDGE_*` 环境变量与系统凭据库中的旧键仍可读取。
+
+确认服务已停止并关闭专用 Chrome 窗口后，可以显式复制到新目录：
+
+```powershell
+python -m steerwx migrate-data
+python -m steerwx doctor
+```
+
+复制不会删除旧目录，也不会覆盖已有 SteerWX 目录；发现 Chrome Profile 占用标记时会停止。若旧配置显式填写了旧目录下的默认 Profile 路径，复制后的程序会使用新目录中的副本；自定义 Profile 路径保持原样。若配置了 `CLAWBRIDGE_HOME`、`CLAWBRIDGE_CONFIG` 或 `CLAWBRIDGE_CHAT_PROFILE`，复制后需检查这些显式覆盖值。若中断后留下 `SteerWX.migrating`，请先检查再重试。完成本地核对前保留旧数据。项目逻辑名与项目根目录不会自动改名。
 
 其中可能包含：
 
@@ -379,14 +396,14 @@ ChatGPT 登录信息保存在独立 Chrome Profile 中；iLink token 通过本�
 
 # 外部服务限制
 
-腾讯 iLink / 微信 ClawBot 是外部传输服务，其可用性、限频、消息频率、会话有效性、绑定状态和真实客户端投递行为均由腾讯控制，可能在 ClawBridge 没有修改的情况下发生变化。
+腾讯 iLink / 微信 ClawBot 是外部传输服务，其可用性、限频、消息频率、会话有效性、绑定状态和真实客户端投递行为均由腾讯控制，可能在 SteerWX 没有修改的情况下发生变化。
 
 当前需要特别注意：
 
 - 腾讯没有公开一个可长期依赖的固定限频阈值，因此不要假设存在稳定的“N 条消息/分钟”规则；
-- 短时间连续发送或高频 outbound 可能被限制，因此 ClawBridge 倾向于短消息和低频主动通知；
+- 短时间连续发送或高频 outbound 可能被限制，因此 SteerWX 倾向于短消息和低频主动通知；
 - `sendmessage ret=0` 或类似接口成功，只代表服务端接受请求，不代表微信客户端一定收到；
-- 对这种情况，ClawBridge 记录为 `ACCEPTED_UNCONFIRMED`，不会对“已接受但未确认投递”的消息进行密集自动重试；
+- 对这种情况，SteerWX 记录为 `ACCEPTED_UNCONFIRMED`，不会对“已接受但未确认投递”的消息进行密集自动重试；
 - 已完成受监督的真实微信 E2E 投递验证，但账号级 iLink 绑定异常或客户端投递异常仍可能独立发生。
 
 ---
@@ -396,7 +413,7 @@ ChatGPT 登录信息保存在独立 Chrome Profile 中；iLink token 通过本�
 ```text
 WeChat ClawBot
       ↕
-ClawBridge Core
+SteerWX Core
       ├─ M1 Work Observer
       ├─ M2 Codex Executor
       └─ M3 Conversation Core
@@ -414,12 +431,12 @@ ClawBridge Core
 默认 session 保存其规范 ChatGPT `/c/...` URL，以及最多 24 条近期 audit messages：
 
 ```text
-%LOCALAPPDATA%\ClawBridge\chat\session.json
+%LOCALAPPDATA%\SteerWX\chat\session.json
 ```
 
 后续运行会重新打开同一个 thread。
 
-ClawBridge 不会搜索 ChatGPT sidebar、人工注入历史记录，也不会在原 thread 不可用时静默替换成另一个 thread。
+只有已认证页面明确显示原 thread 不存在或无权访问时，SteerWX 才会新建一次对话，保留项目绑定，并发送本次 `/chat` 原消息。登录、网络、浏览器和无法明确判断的页面异常仍按原失败路径处理。SteerWX 不搜索 ChatGPT sidebar，也不人工注入历史记录。
 
 ## M3-C：轻量项目上下文
 
@@ -469,7 +486,7 @@ ClawBridge 不会搜索 ChatGPT sidebar、人工注入历史记录，也不会�
 
 # 为什么做这个项目
 
-ClawBridge 解决的是一个非常具体的问题：
+SteerWX 解决的是一个非常具体的问题：
 
 > 当开发工作已经大量依赖 ChatGPT、Codex 和本地 AI 工具后，人离开电脑，怎样还能低成本地知道任务进行到哪里、继续讨论问题，并在真正需要时显式触发本地分析？
 
@@ -477,7 +494,7 @@ ClawBridge 解决的是一个非常具体的问题：
 
 微信本来就在手机上。
 
-所以 ClawBridge 尝试把微信变成一个很轻的入口：
+所以 SteerWX 尝试把微信变成一个很轻的入口：
 
 **平时用 `/chat` 讨论，用 `/work` 观察，真正需要本地分析时再明确使用 `/codex`。**
 
@@ -498,6 +515,6 @@ ClawBridge 解决的是一个非常具体的问题：
 
 # License
 
-ClawBridge 使用 [MIT License](LICENSE)。
+SteerWX 使用 [MIT License](LICENSE)。
 
 如果这个小工具对你有帮助，欢迎给项目一个 ⭐ Star，让更多有类似需求的人更容易看到它。

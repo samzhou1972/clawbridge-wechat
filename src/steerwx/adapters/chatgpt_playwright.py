@@ -7,8 +7,8 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
-from clawbridge.config import ChatConfig, local_app_data
-from clawbridge.conversation import normalize_thread_url
+from steerwx.config import ChatConfig, local_app_data
+from steerwx.conversation import normalize_thread_url
 
 
 STAGES = (
@@ -58,10 +58,12 @@ class PlaywrightChatDriver:
         "[contenteditable='true'][role='textbox']",
         "form [data-testid='prompt-textarea']",
     )
+    SEND_BUTTON = "form button[type='submit']"
     ACCOUNT_MARKERS = (
         "[data-testid='accounts-profile-button']",
         "[data-testid='profile-button']",
-        "button[aria-label*='Profile']",
+        "button[aria-label*='profile' i]",
+        "button[aria-label*='个人资料']",
     )
     LOGIN_MARKERS = (
         "a[href^='/auth/login']",
@@ -71,6 +73,7 @@ class PlaywrightChatDriver:
     ASSISTANT_MESSAGES = (
         "[data-message-author-role='assistant']",
         "article[data-turn='assistant']",
+        "[data-markdown-text-style='assistant-message']",
     )
     GENERATION_MARKERS = (
         "button[data-testid='stop-button']",
@@ -84,6 +87,10 @@ class PlaywrightChatDriver:
     )
     UNAVAILABLE_MARKERS = (
         "text=Unable to load conversation",
+        "text=Conversation not found",
+        "text=You do not have access to this conversation",
+    )
+    THREAD_NOT_FOUND_MARKERS = (
         "text=Conversation not found",
         "text=You do not have access to this conversation",
     )
@@ -229,6 +236,10 @@ class PlaywrightChatDriver:
             "unavailable_marker_found": any(
                 item["visible_count"] for item in unavailable.values()
             ),
+            "thread_not_found_marker_found": any(
+                unavailable[selector]["visible_count"]
+                for selector in self.THREAD_NOT_FOUND_MARKERS
+            ),
             "readiness_markers": {
                 "composer": composer is not None,
                 "authenticated": auth["state"] == "PASS",
@@ -263,6 +274,9 @@ class PlaywrightChatDriver:
                 composer, observation = self._observe_readiness()
                 if observation["auth_state"] == "FAIL":
                     raise ChatDriverError("PAGE_READY", "ChatGPT session is explicitly logged out", self.url)
+                if (self._requested_thread_url and observation["auth_state"] == "PASS"
+                        and observation["thread_not_found_marker_found"] and composer is None):
+                    raise ChatDriverError("PAGE_READY", "THREAD_NOT_FOUND", self.url)
                 if composer is not None and observation["auth_state"] == "PASS":
                     break
                 self._page.wait_for_timeout(250)
@@ -305,6 +319,8 @@ class PlaywrightChatDriver:
 
     def reset_thread(self) -> None:
         self._start()
+        self._requested_thread_url = ""
+        self._startup_started_at = None
         self._page.goto("https://chatgpt.com/", wait_until="domcontentloaded")
         self._set_stage("PAGE_READY")
 
@@ -320,6 +336,10 @@ class PlaywrightChatDriver:
             self._page.goto(target, wait_until="domcontentloaded")
             self.ensure_ready()
             if self._last_observation.get("unavailable_marker_found"):
+                if (self._last_observation.get("auth_state") == "PASS"
+                        and self._last_observation.get("thread_not_found_marker_found")
+                        and (not self._last_observation.get("composer_found") or self.url != target)):
+                    raise ChatDriverError("PAGE_READY", "THREAD_NOT_FOUND", self.url)
                 raise ChatDriverError("PAGE_READY", "THREAD_UNAVAILABLE", self.url)
             try:
                 final = normalize_thread_url(self.url)
@@ -379,7 +399,18 @@ class PlaywrightChatDriver:
                 raise ChatDriverError("PAGE_READY", "ChatGPT composer disappeared", self.url)
             composer.fill(clean)
             self._set_stage("PROMPT_ENTERED")
-            composer.press("Enter")
+            send_button = self._page.locator(self.SEND_BUTTON)
+            if send_button.count() != 1:
+                raise ChatDriverError("PROMPT_ENTERED", "SEND_BUTTON_NOT_FOUND", self.url)
+            send_button = send_button.first
+            send_deadline = time.monotonic() + min(10, self.config.startup_timeout_seconds)
+            while time.monotonic() < send_deadline:
+                if send_button.is_visible(timeout=100) and send_button.is_enabled(timeout=100):
+                    break
+                self._page.wait_for_timeout(250)
+            else:
+                raise ChatDriverError("PROMPT_ENTERED", "SEND_BUTTON_DISABLED", self.url)
+            send_button.click()
             self._set_stage("PROMPT_SENT")
             started_at = time.monotonic()
             deadline = started_at + self.config.reply_timeout_seconds

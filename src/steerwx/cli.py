@@ -6,19 +6,20 @@ import time
 
 import qrcode
 
-from clawbridge.channels.credentials import CredentialStore, WeixinCredentials
-from clawbridge.channels.weixin import (
+from steerwx.channels.credentials import CredentialStore, WeixinCredentials
+from steerwx.channels.weixin import (
     API_BASE,
     ILinkStaleTokenError,
     WeixinClient,
     extract_text,
     safe_send_text,
 )
-from clawbridge.config import load_config
-from clawbridge.conversation import ConversationService, SessionStore, bind_project, prepare_message
-from clawbridge.doctor import run_doctor
-from clawbridge.project_context import build_project_context  # compatibility for existing tests
-from clawbridge.service import run_bridge, send_work_notification
+from steerwx.config import load_config
+from steerwx.conversation import ConversationService, SessionStore, bind_project, prepare_message
+from steerwx.doctor import run_doctor
+from steerwx.project_context import build_project_context  # compatibility for existing tests
+from steerwx.service import run_bridge, send_work_notification
+from steerwx.runtime import migrate_data
 
 
 def _chat_browser(setup: bool, send: bool = False, keep_open: bool = False) -> int:
@@ -26,7 +27,7 @@ def _chat_browser(setup: bool, send: bool = False, keep_open: bool = False) -> i
     print(f"Config                {config.config_path}")
     print(f"Profile directory     {config.chat.profile_dir}")
     if setup:
-        from clawbridge.adapters.chatgpt_bootstrap import (
+        from steerwx.adapters.chatgpt_bootstrap import (
             ChromeBootstrapError,
             launch_manual_login,
         )
@@ -38,10 +39,10 @@ def _chat_browser(setup: bool, send: bool = False, keep_open: bool = False) -> i
             return 2
         print("请在打开的 Chrome 中人工完成 ChatGPT 登录。")
         print("登录完成并确认可正常使用 ChatGPT 后，关闭该 Chrome，然后运行：")
-        print("\npython -m clawbridge chat-browser doctor")
+        print("\npython -m steerwx chat-browser doctor")
         return 0
 
-    from clawbridge.adapters.chatgpt_playwright import PlaywrightChatDriver
+    from steerwx.adapters.chatgpt_playwright import PlaywrightChatDriver
 
     driver = PlaywrightChatDriver(config.chat)
     try:
@@ -63,11 +64,11 @@ def _chat_browser(setup: bool, send: bool = False, keep_open: bool = False) -> i
             return 2
         if send:
             driver.reset_thread()
-            reply = driver.send("请只回复 CLAWBRIDGE_BROWSER_OK")
+            reply = driver.send("请只回复 STEERWX_BROWSER_OK")
             print("Prompt sent           PASS")
             print("Response              PASS")
             print(f"\nReply:\n{reply.text}")
-            return 0 if reply.text.strip() == "CLAWBRIDGE_BROWSER_OK" else 3
+            return 0 if reply.text.strip() == "STEERWX_BROWSER_OK" else 3
         return 0
     except Exception as exc:
         stage = getattr(exc, "stage", driver.stage)
@@ -106,7 +107,6 @@ def _chat_local(value: str, *, project: str | None = None, show_context: bool = 
         print(f"Project               {session.current_project or 'NONE'}")
         print(f"Project root          {root or '-'}")
         print(f"Thread                {'ACTIVE' if session.browser_thread_url else 'NONE'}")
-        print(f"Thread URL            {session.browser_thread_url or '-'}")
         print(f"Recent messages       {len(session.recent_messages)}")
         print(f"Updated               {session.updated_at}")
         return 0
@@ -193,7 +193,7 @@ def _login() -> int:
             verify_code = input("请输入手机微信显示的数字：").strip()
             continue
         if result.status == "verify_code_blocked":
-            print("配对码多次错误，请重新执行 clawbridge login。", file=sys.stderr)
+            print("配对码多次错误，请重新执行 python -m steerwx login。", file=sys.stderr)
             return 2
         if result.status == "scaned_but_redirect":
             if result.redirect_host:
@@ -209,7 +209,7 @@ def _login() -> int:
             print("服务端报告 ClawBot 已绑定，但本机没有可复用凭据。", file=sys.stderr)
             return 3
         if result.status == "expired":
-            print("二维码已过期，请重新执行 clawbridge login。", file=sys.stderr)
+            print("二维码已过期，请重新执行 python -m steerwx login。", file=sys.stderr)
             return 2
         if result.status != "confirmed":
             print(f"未知登录状态: {result.status}", file=sys.stderr)
@@ -231,7 +231,7 @@ def _echo() -> int:
     store = CredentialStore()
     loaded = store.load()
     if not loaded:
-        print("尚未登录，请先执行 clawbridge login。", file=sys.stderr)
+        print("尚未登录，请先执行 python -m steerwx login。", file=sys.stderr)
         return 2
     credentials, token = loaded
     client = WeixinClient()
@@ -244,7 +244,7 @@ def _echo() -> int:
             try:
                 data = client.get_updates(token, credentials.base_url, cursor)
             except ILinkStaleTokenError as exc:
-                print(f"M0 echo FAIL: iLink bot token stale ({exc}). 请重新执行 clawbridge login。", file=sys.stderr)
+                print(f"M0 echo FAIL: iLink bot token stale ({exc}). 请重新执行 python -m steerwx login。", file=sys.stderr)
                 return 2
             cursor = data.get("get_updates_buf") or cursor
             for message in data.get("msgs") or []:
@@ -280,9 +280,10 @@ def _echo() -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="clawbridge")
+    parser = argparse.ArgumentParser(prog="steerwx")
     sub = parser.add_subparsers(dest="command", required=True)
-    sub.add_parser("doctor", help="Check first-run ClawBridge readiness")
+    sub.add_parser("doctor", help="Check first-run SteerWX readiness")
+    sub.add_parser("migrate-data", help="Copy legacy ClawBridge data to SteerWX without deleting it")
     sub.add_parser("login", help="Bind WeChat ClawBot with QR login")
     sub.add_parser("echo", help="M0: reply world to a new hello message")
     sub.add_parser("run", help="Run the WeChat bridge service")
@@ -312,6 +313,14 @@ def main() -> int:
     args = build_parser().parse_args()
     if args.command == "doctor":
         return run_doctor()
+    if args.command == "migrate-data":
+        try:
+            old, new = migrate_data()
+        except (OSError, RuntimeError) as exc:
+            print(f"Data migration stopped: {exc}", file=sys.stderr)
+            return 2
+        print(f"Copied runtime data from {old} to {new}. Original data was retained.")
+        return 0
     if args.command == "login":
         return _login()
     if args.command == "echo":

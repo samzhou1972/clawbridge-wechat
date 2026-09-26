@@ -3,8 +3,8 @@ import subprocess
 
 import pytest
 
-import clawbridge.adapters.codex as codex
-from clawbridge.config import AppConfig, ChatConfig
+import steerwx.adapters.codex as codex
+from steerwx.config import AppConfig, ChatConfig
 
 
 def configured(tmp_path: Path, projects: dict[str, Path]) -> AppConfig:

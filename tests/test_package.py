@@ -1,5 +1,5 @@
-from clawbridge import __version__
+from steerwx import __version__
 
 
 def test_version_is_declared() -> None:
-    assert __version__
+    assert __version__ == "0.2.0"

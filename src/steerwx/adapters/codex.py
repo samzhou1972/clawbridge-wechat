@@ -7,7 +7,8 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
-from clawbridge.config import AppConfig, load_config, resolve_configured_project
+from steerwx.config import AppConfig, load_config, resolve_configured_project
+from steerwx.runtime import local_app_data
 
 
 @dataclass(slots=True)
@@ -17,7 +18,7 @@ class CodexResult:
     message: str
     returncode: int
 def find_codex() -> Path:
-    configured = os.getenv("CLAWBRIDGE_CODEX")
+    configured = os.getenv("STEERWX_CODEX") or os.getenv("CLAWBRIDGE_CODEX")
     if configured:
         path = Path(configured).expanduser()
         if path.exists():
@@ -40,7 +41,7 @@ def run_readonly(
 ) -> CodexResult:
     project = resolve_configured_project(config or load_config(), project_name)
     codex = find_codex()
-    temp_root = Path(os.getenv("LOCALAPPDATA", str(Path.home()))) / "ClawBridge" / "tmp"
+    temp_root = local_app_data() / "tmp"
     temp_root.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile(
         mode="w", suffix=".txt", prefix="codex-last-", dir=temp_root,

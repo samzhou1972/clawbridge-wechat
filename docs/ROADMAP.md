@@ -9,7 +9,7 @@ Status: PASS
 - Reply to the same conversation.
 - Store credentials locally and safely.
 
-Exit: `WeChat → ClawBridge → WeChat` works reliably.
+Exit: `WeChat → SteerWX → WeChat` works reliably.
 
 ## M1 — Work Observer
 
@@ -42,4 +42,4 @@ Status: PASS
 M3 never executes project changes. `/codex` remains the explicit read-only analysis boundary.
 M3 COMPLETE: YES.
 
-Known external issue: during acceptance, one previously bound WeChat account exhibited an iLink-specific QR rebind and outbound client-delivery anomaly while inbound and online-state signaling still worked. A different account on the same ClawBridge host completed QR binding, echo, `/work`, and `/chat` E2E successfully. This external account/binding anomaly does not block M0 or M3 acceptance.
+Known external issue: during acceptance, one previously bound WeChat account exhibited an iLink-specific QR rebind and outbound client-delivery anomaly while inbound and online-state signaling still worked. A different account on the same SteerWX host completed QR binding, echo, `/work`, and `/chat` E2E successfully. This external account/binding anomaly does not block M0 or M3 acceptance.

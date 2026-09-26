@@ -1,10 +1,11 @@
 import json
 
 import pytest
+from steerwx.adapters.chatgpt_playwright import ChatDriverError
 
-from clawbridge.cli import _chat_local
-from clawbridge.config import AppConfig, ChatConfig
-from clawbridge.conversation import (
+from steerwx.cli import _chat_local
+from steerwx.config import AppConfig, ChatConfig
+from steerwx.conversation import (
     MAX_RECENT_MESSAGES,
     ConversationService,
     ConversationSession,
@@ -13,13 +14,13 @@ from clawbridge.conversation import (
     normalize_thread_url,
     prepare_message,
 )
-from clawbridge.project_context import (
+from steerwx.project_context import (
     GitContextProvider,
     WorkContextProvider,
     build_project_context,
     select_context,
 )
-from clawbridge.observers.work import WorkSnapshot
+from steerwx.observers.work import WorkSnapshot
 
 
 class Reply:
@@ -104,8 +105,108 @@ def test_second_process_reuses_saved_thread(tmp_path):
     )
     result = second.send("two")
     assert result.resumed is True
+    assert result.recovered is False
     assert second_driver.opened == "https://chatgpt.com/c/abc"
+    assert second_driver.started is False
     assert len(store.load().recent_messages) == 4
+
+
+class RecoveryDriver:
+    stage = "IDLE"
+
+    def __init__(self, open_error, *, fail_at=None):
+        self.open_error = open_error
+        self.fail_at = fail_at
+        self.opened = []
+        self.started = 0
+        self.prompts = []
+        self.closed = False
+
+    def open_thread(self, url):
+        self.opened.append(url)
+        if self.open_error:
+            raise self.open_error
+
+    def start_new_thread(self):
+        self.started += 1
+        if self.fail_at == "start":
+            raise ChatDriverError("PAGE_READY", "PAGE_READY_TIMEOUT")
+
+    def send(self, prompt):
+        self.prompts.append(prompt)
+        if self.fail_at == "send":
+            raise ChatDriverError("PROMPT_SENT", "REPLY_TIMEOUT")
+        return Reply("answer")
+
+    def current_thread_url(self):
+        return "https://chatgpt.com/c/new-thread" if self.started else "https://chatgpt.com/c/old-thread"
+
+    def close(self):
+        self.closed = True
+
+
+def recovery_case(tmp_path, driver):
+    store = SessionStore(tmp_path / "session.json")
+    store.save(ConversationSession(
+        current_project="demo",
+        browser_thread_url="https://chatgpt.com/c/old-thread",
+        recent_messages=[RecentMessage("user", "prior turn", "t")],
+    ))
+    conversation = ConversationService(
+        ChatConfig(profile_dir=tmp_path / "profile"), store=store,
+        driver_factory=lambda config: driver,
+    )
+    return conversation, store
+
+
+def test_confirmed_deleted_thread_restarts_once_with_same_project_and_message(tmp_path):
+    driver = RecoveryDriver(ChatDriverError("PAGE_READY", "THREAD_NOT_FOUND"))
+    conversation, store = recovery_case(tmp_path, driver)
+    result = conversation.send("original message", prompt="read-only project envelope")
+    saved = store.load()
+    assert driver.opened == ["https://chatgpt.com/c/old-thread"]
+    assert driver.started == 1
+    assert driver.prompts == ["read-only project envelope"]
+    assert result.recovered is True and result.resumed is False
+    assert saved.current_project == "demo"
+    assert saved.browser_thread_url == "https://chatgpt.com/c/new-thread"
+    assert [(item.role, item.text) for item in saved.recent_messages] == [
+        ("user", "original message"), ("assistant", "answer"),
+    ]
+    assert driver.closed is True
+
+
+@pytest.mark.parametrize("reason", [
+    "ChatGPT session is explicitly logged out",
+    "NETWORK_ERROR",
+    "PAGE_READY_TIMEOUT",
+    "ChatGPT composer disappeared",
+    "BROWSER_STARTING failed",
+    "THREAD_UNAVAILABLE",
+])
+def test_other_open_failures_do_not_create_thread(tmp_path, reason):
+    driver = RecoveryDriver(ChatDriverError("PAGE_READY", reason))
+    conversation, store = recovery_case(tmp_path, driver)
+    before = store.path.read_bytes()
+    with pytest.raises(ChatDriverError, match=reason):
+        conversation.send("original message")
+    assert driver.started == 0 and driver.prompts == []
+    assert store.path.read_bytes() == before
+    assert driver.closed is True
+
+
+@pytest.mark.parametrize("fail_at", ["start", "send"])
+def test_failed_recovery_does_not_loop_or_replace_session(tmp_path, fail_at):
+    driver = RecoveryDriver(ChatDriverError("PAGE_READY", "THREAD_NOT_FOUND"), fail_at=fail_at)
+    conversation, store = recovery_case(tmp_path, driver)
+    before = store.path.read_bytes()
+    with pytest.raises(ChatDriverError):
+        conversation.send("original message")
+    assert driver.opened == ["https://chatgpt.com/c/old-thread"]
+    assert driver.started == 1
+    assert len(driver.prompts) <= 1
+    assert store.path.read_bytes() == before
+    assert driver.closed is True
 
 
 def test_recent_messages_trim_oldest_entries(tmp_path):
@@ -148,7 +249,7 @@ def test_failure_preserves_existing_session_and_closes_driver(tmp_path, failure)
 def test_reset_clears_thread_and_history_but_keeps_default(tmp_path):
     store = SessionStore(tmp_path / "session.json")
     store.save(ConversationSession(
-        current_project="clawbridge",
+        current_project="steerwx",
         browser_thread_url="https://chatgpt.com/c/abc",
         recent_messages=[RecentMessage("user", "hello", "t")],
     ))
@@ -156,7 +257,7 @@ def test_reset_clears_thread_and_history_but_keeps_default(tmp_path):
     assert reset.session_id == "default"
     assert reset.browser_thread_url is None
     assert reset.recent_messages == []
-    assert reset.current_project == "clawbridge"
+    assert reset.current_project == "steerwx"
 
 
 @pytest.mark.parametrize(
@@ -175,11 +276,17 @@ def test_invalid_thread_urls_are_rejected(url):
         normalize_thread_url(url)
 
 
+def test_project_thread_url_is_saved_as_canonical_conversation_url():
+    assert normalize_thread_url(
+        "https://chatgpt.com/g/g-p-project/c/thread-123?foo=bar"
+    ) == "https://chatgpt.com/c/thread-123"
+
+
 def test_session_save_is_atomic_and_leaves_no_temp_file(tmp_path, monkeypatch):
     store = SessionStore(tmp_path / "session.json")
     store.save(ConversationSession())
     calls = []
-    monkeypatch.setattr("clawbridge.conversation.os.replace", lambda source, target: calls.append((source, target)))
+    monkeypatch.setattr("steerwx.conversation.os.replace", lambda source, target: calls.append((source, target)))
     store.save(ConversationSession())
     assert len(calls) == 1
     assert calls[0][0].parent == store.path.parent
@@ -192,7 +299,7 @@ def test_failed_atomic_replace_preserves_old_session(tmp_path, monkeypatch):
     store.save(ConversationSession(recent_messages=[RecentMessage("user", "old", "t")]))
     before = store.path.read_bytes()
     monkeypatch.setattr(
-        "clawbridge.conversation.os.replace",
+        "steerwx.conversation.os.replace",
         lambda source, target: (_ for _ in ()).throw(OSError("replace failed")),
     )
     with pytest.raises(OSError, match="replace failed"):
@@ -213,17 +320,19 @@ def test_saved_json_has_only_session_fields(tmp_path):
 def test_status_does_not_construct_browser_driver(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
     monkeypatch.setattr(
-        "clawbridge.conversation.ConversationService._default_driver",
+        "steerwx.conversation.ConversationService._default_driver",
         lambda config: (_ for _ in ()).throw(AssertionError("browser started")),
     )
     assert _chat_local("status") == 0
-    assert "Thread                NONE" in capsys.readouterr().out
+    output = capsys.readouterr().out
+    assert "Thread                NONE" in output
+    assert "Thread URL" not in output
 
 
 def test_prompt_envelope_is_not_saved_as_recent_user_message(tmp_path):
     driver = FakeDriver()
     conversation, store = service(tmp_path, driver)
-    conversation.send("原始消息", prompt="[ClawBridge Local Facts]\nsecret facts")
+    conversation.send("原始消息", prompt="[SteerWX Local Facts]\nsecret facts")
     assert store.load().recent_messages[0].text == "原始消息"
 
 
@@ -249,7 +358,7 @@ def test_context_envelope_marks_facts_and_original_message(tmp_path):
         "demo", tmp_path, "Work和Git状态", work_provider=StubWork(), git_provider=StubGit()
     )
     assert result.selection.names == ("Work", "Git")
-    assert "[ClawBridge Local Facts]" in result.envelope
+    assert "[SteerWX Local Facts]" in result.envelope
     assert "Work:\nwork fact" in result.envelope
     assert "Git:\ngit fact" in result.envelope
     assert result.envelope.endswith("[User Message]\nWork和Git状态")
@@ -281,7 +390,7 @@ def test_git_provider_clean_dirty_branch_commit_and_no_shell(tmp_path, monkeypat
         code, stdout, stderr = next(outputs)
         return __import__("subprocess").CompletedProcess(args, code, stdout, stderr)
 
-    monkeypatch.setattr("clawbridge.project_context.subprocess.run", fake_run)
+    monkeypatch.setattr("steerwx.project_context.subprocess.run", fake_run)
     clean = GitContextProvider().read(tmp_path)
     dirty = GitContextProvider().read(tmp_path)
     assert "status: OK" in clean
@@ -299,7 +408,7 @@ def test_git_provider_non_repository(tmp_path, monkeypatch):
             args, 128, "", "fatal: not a git repository"
         )
 
-    monkeypatch.setattr("clawbridge.project_context.subprocess.run", fake_run)
+    monkeypatch.setattr("steerwx.project_context.subprocess.run", fake_run)
     assert GitContextProvider().read(tmp_path) == "status: NOT_A_GIT_REPOSITORY"
 
 
@@ -341,7 +450,7 @@ def test_git_provider_no_commits_keeps_status_and_branch(tmp_path, monkeypatch):
         code, stdout, stderr = next(outputs)
         return __import__("subprocess").CompletedProcess(args, code, stdout, stderr)
 
-    monkeypatch.setattr("clawbridge.project_context.subprocess.run", fake_run)
+    monkeypatch.setattr("steerwx.project_context.subprocess.run", fake_run)
     result = GitContextProvider().read(tmp_path)
     assert "status: PARTIAL" in result
     assert "branch: main" in result
@@ -361,7 +470,7 @@ def test_git_provider_clean_repository_without_commits_is_partial(tmp_path, monk
         code, stdout, stderr = next(outputs)
         return __import__("subprocess").CompletedProcess(args, code, stdout, stderr)
 
-    monkeypatch.setattr("clawbridge.project_context.subprocess.run", fake_run)
+    monkeypatch.setattr("steerwx.project_context.subprocess.run", fake_run)
     result = GitContextProvider().read(tmp_path)
     assert "status: PARTIAL" in result
     assert "working_tree: CLEAN" in result
@@ -372,7 +481,7 @@ def test_git_provider_clean_repository_without_commits_is_partial(tmp_path, monk
 def test_git_provider_log_failure_is_partial(tmp_path, monkeypatch):
     outputs = iter([(0, "", ""), (0, "main\n", ""), (1, "", "log failed")])
     monkeypatch.setattr(
-        "clawbridge.project_context.subprocess.run",
+        "steerwx.project_context.subprocess.run",
         lambda args, **kwargs: __import__("subprocess").CompletedProcess(args, *next(outputs)),
     )
     result = GitContextProvider().read(tmp_path)
@@ -384,7 +493,7 @@ def test_git_provider_log_failure_is_partial(tmp_path, monkeypatch):
 def test_git_provider_status_failure_keeps_branch_and_commit(tmp_path, monkeypatch):
     outputs = iter([(1, "", "status failed"), (0, "main\n", ""), (0, "abc\tmessage\n", "")])
     monkeypatch.setattr(
-        "clawbridge.project_context.subprocess.run",
+        "steerwx.project_context.subprocess.run",
         lambda args, **kwargs: __import__("subprocess").CompletedProcess(args, *next(outputs)),
     )
     result = GitContextProvider().read(tmp_path)
@@ -396,7 +505,7 @@ def test_git_provider_status_failure_keeps_branch_and_commit(tmp_path, monkeypat
 
 def test_git_provider_all_fact_commands_fail_is_unavailable(tmp_path, monkeypatch):
     monkeypatch.setattr(
-        "clawbridge.project_context.subprocess.run",
+        "steerwx.project_context.subprocess.run",
         lambda args, **kwargs: (_ for _ in ()).throw(FileNotFoundError("git missing")),
     )
     result = GitContextProvider().read(tmp_path)
@@ -417,14 +526,14 @@ def test_chat_local_use_saves_project_without_changing_conversation(tmp_path, mo
     root = tmp_path / "repo"
     root.mkdir()
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
-    monkeypatch.setattr("clawbridge.cli.load_config", lambda: _app_config(tmp_path, {"demo": root}))
+    monkeypatch.setattr("steerwx.cli.load_config", lambda: _app_config(tmp_path, {"demo": root}))
     store = SessionStore()
     store.save(ConversationSession(
         browser_thread_url="https://chatgpt.com/c/existing",
         recent_messages=[RecentMessage("user", "kept", "t")],
     ))
     monkeypatch.setattr(
-        "clawbridge.conversation.ConversationService._default_driver",
+        "steerwx.conversation.ConversationService._default_driver",
         lambda config: (_ for _ in ()).throw(AssertionError("browser started")),
     )
     assert _chat_local("use", project="demo") == 0
@@ -438,7 +547,7 @@ def test_chat_local_use_saves_project_without_changing_conversation(tmp_path, mo
 def test_chat_local_use_rejects_unknown_and_missing_root(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
     missing = tmp_path / "missing"
-    monkeypatch.setattr("clawbridge.cli.load_config", lambda: _app_config(tmp_path, {"gone": missing}))
+    monkeypatch.setattr("steerwx.cli.load_config", lambda: _app_config(tmp_path, {"gone": missing}))
     assert _chat_local("use", project="unknown") == 2
     assert "PROJECT_NOT_CONFIGURED" in capsys.readouterr().err
     assert _chat_local("use", project="gone") == 2
@@ -449,10 +558,10 @@ def test_status_shows_project_without_running_providers(tmp_path, monkeypatch, c
     root = tmp_path / "repo"
     root.mkdir()
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
-    monkeypatch.setattr("clawbridge.cli.load_config", lambda: _app_config(tmp_path, {"demo": root}))
+    monkeypatch.setattr("steerwx.cli.load_config", lambda: _app_config(tmp_path, {"demo": root}))
     SessionStore().save(ConversationSession(current_project="demo"))
     monkeypatch.setattr(
-        "clawbridge.cli.build_project_context",
+        "steerwx.cli.build_project_context",
         lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("provider ran")),
     )
     assert _chat_local("status") == 0
@@ -465,7 +574,7 @@ def test_show_context_reports_selection_and_original_send(tmp_path, monkeypatch,
     root = tmp_path / "repo"
     root.mkdir()
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
-    monkeypatch.setattr("clawbridge.cli.load_config", lambda: _app_config(tmp_path, {"demo": root}))
+    monkeypatch.setattr("steerwx.cli.load_config", lambda: _app_config(tmp_path, {"demo": root}))
     SessionStore().save(ConversationSession(current_project="demo"))
     calls = []
 
@@ -477,18 +586,18 @@ def test_show_context_reports_selection_and_original_send(tmp_path, monkeypatch,
             calls.append((message, prompt))
             return type("Result", (), {"resumed": False, "reply": "ok"})()
 
-    monkeypatch.setattr("clawbridge.cli.ConversationService", FakeService)
+    monkeypatch.setattr("steerwx.cli.ConversationService", FakeService)
     assert _chat_local("当前项目有没有未提交修改？", show_context=True) == 0
     output = capsys.readouterr().out
     assert "Selected project      demo" in output
     assert "Selected providers    Git" in output
     assert calls[0][0] == "当前项目有没有未提交修改？"
-    assert "[ClawBridge Local Facts]" in calls[0][1]
+    assert "[SteerWX Local Facts]" in calls[0][1]
 
 
 def test_chat_without_project_does_not_build_context(tmp_path, monkeypatch):
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
-    monkeypatch.setattr("clawbridge.cli.load_config", lambda: _app_config(tmp_path, {}))
+    monkeypatch.setattr("steerwx.cli.load_config", lambda: _app_config(tmp_path, {}))
     calls = []
 
     class FakeService:
@@ -499,14 +608,14 @@ def test_chat_without_project_does_not_build_context(tmp_path, monkeypatch):
             calls.append((message, prompt))
             return type("Result", (), {"resumed": False, "reply": "ok"})()
 
-    monkeypatch.setattr("clawbridge.cli.ConversationService", FakeService)
+    monkeypatch.setattr("steerwx.cli.ConversationService", FakeService)
     monkeypatch.setattr(
-        "clawbridge.cli.build_project_context",
+        "steerwx.cli.build_project_context",
         lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("context built")),
     )
     assert _chat_local("普通聊天") == 0
     assert calls[0][0] == "普通聊天"
-    assert "[ClawBridge Conversation Mode]" in calls[0][1]
+    assert "[SteerWX Conversation Mode]" in calls[0][1]
     assert calls[0][1].endswith("[User Message]\n普通聊天")
 
 
@@ -515,7 +624,7 @@ def test_conversation_policy_is_separate_and_not_saved(tmp_path):
     driver = FakeDriver()
     prompt, context = prepare_message(_app_config(tmp_path, {}), store, "请修改代码")
     assert context is None
-    assert prompt.startswith("[ClawBridge Conversation Mode]")
+    assert prompt.startswith("[SteerWX Conversation Mode]")
     assert "explicit /codex" in prompt
     ConversationService(
         ChatConfig(profile_dir=tmp_path / "profile"),
@@ -523,4 +632,4 @@ def test_conversation_policy_is_separate_and_not_saved(tmp_path):
         driver_factory=lambda config: driver,
     ).send("请修改代码", prompt=prompt)
     assert store.load().recent_messages[0].text == "请修改代码"
-    assert "ClawBridge Conversation Mode" not in store.load().recent_messages[0].text
+    assert "SteerWX Conversation Mode" not in store.load().recent_messages[0].text

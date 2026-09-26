@@ -1,13 +1,17 @@
 # Architecture
 
+## v0.2.0 runtime compatibility
+
+New installations use `%LOCALAPPDATA%\SteerWX`. Existing installations continue using `%LOCALAPPDATA%\ClawBridge` until an explicit `python -m steerwx migrate-data` copy. The copy is non-destructive and refuses to merge with an existing target. New keyring names have read fallback to the prior ClawBridge names. The old Python module is a CLI-only compatibility shim for this release.
+
 ## Core principle
 
-ClawBridge is a bridge, not an agent framework. Each external dependency is isolated behind an adapter.
+SteerWX is a bridge, not an agent framework. Each external dependency is isolated behind an adapter.
 
 ```text
 WeChat ClawBot
       ↕
-ClawBridge core
+SteerWX core
       ├─ M1 Work Observer
       ├─ M2 Codex Read-only Analysis
       └─ M3 Conversation Core
@@ -28,8 +32,8 @@ ClawBridge core
 - M3 Converse means understand → analyze → discuss → decide → prepare a local analysis
   request. It never executes. M2 requires an explicit `/codex` command and stays read-only.
 - Browser thread state is transport/runtime state, not authoritative project state.
-- M3-A uses a normal Chrome process for manual authentication bootstrap; runtime browser automation remains Playwright. Both use the dedicated persistent ClawBridge profile.
-- The ClawBridge Chrome profile is isolated from daily Edge and every other browser automation profile.
+- M3-A uses a normal Chrome process for manual authentication bootstrap; runtime browser automation remains Playwright. Both use the dedicated persistent SteerWX profile.
+- The SteerWX Chrome profile is isolated from daily Edge and every other browser automation profile.
 - Earlier extension-based experiments are not part of the public runtime architecture.
 - M3-D connects WeChat `/chat` to the existing ConversationService; it does not create
   an execution path or duplicate Context routing.
@@ -38,14 +42,22 @@ ClawBridge core
 ## M3-B conversation session
 
 The first session implementation supports only `default`. Its authority is a small
-JSON artifact under `%LOCALAPPDATA%\ClawBridge\chat\session.json` containing the
+JSON artifact under `%LOCALAPPDATA%\SteerWX\chat\session.json` containing the
 session id, canonical browser thread URL, at most 24 recent user/assistant messages,
 and timestamps. Writes replace the file atomically only after a complete user and
 assistant round trip.
 
-The saved `https://chatgpt.com/c/...` URL is opened directly on later CLI runs. A
-missing or inaccessible thread is an explicit failure; ClawBridge does not search the
-sidebar, create a replacement, inject history, summarize, or recover automatically.
+When no URL is saved, the first ordinary `/chat` creates a conversation without user
+setup. The saved `https://chatgpt.com/c/...` URL is opened directly on later runs. Only
+an authenticated page with explicit `Conversation not found` or
+`You do not have access` permits one new-thread recovery for the current message.
+ChatGPT may redirect a canonical `/c/<id>` URL to a project route
+`/g/<project>/c/<id>`; the driver accepts it only when the conversation ID matches
+and keeps the local URL in canonical `/c/<id>` form.
+The project binding survives; the new thread and
+its first completed turn replace the old thread audit atomically. Ambiguous page,
+auth, browser, and network failures remain explicit failures. SteerWX does not search
+the sidebar, inject history, or replay an uncertain send.
 `recent_messages` is local audit state, not prompt context.
 
 ## M3-C project context
@@ -54,11 +66,13 @@ The default session may bind one `current_project` logical name. Its root comes 
 from `[projects.<name>]` in the local config; the same configured-project resolver is
 used by Project Context and `/codex`. Arbitrary message text is never treated as a
 filesystem path. Switching projects does not reset or replace the selected
-ChatGPT thread. Reset clears thread/history but preserves the binding.
+ChatGPT thread. Reset clears thread/history but preserves the binding; the next `/chat`
+creates a new conversation. An unbound WeChat `/chat` prompts for `/chat use <project>`
+and never guesses a project path.
 
 Project Context is lightweight and demand-driven. One centralized deterministic
 router selects Work and/or Git from explicit intent keywords. With a bound project,
-the outbound prompt separates `[ClawBridge Local Facts]` from `[User Message]`.
+the outbound prompt separates `[SteerWX Local Facts]` from `[User Message]`.
 The local audit still saves the original user text, never the enriched envelope.
 
 The Work provider reuses the M1 rollout parser and only returns a snapshot whose cwd
