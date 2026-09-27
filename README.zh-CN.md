@@ -115,8 +115,8 @@ SteerWX 不是一个“大而全”的 Agent Framework。它不提供模型路�
 ## 1. 安装 SteerWX
 
 ```powershell
-git clone https://github.com/samzhou1972/clawbridge-wechat.git
-cd clawbridge-wechat
+git clone https://github.com/samzhou1972/steerwx.git
+cd steerwx
 python -m pip install -e .
 ```
 

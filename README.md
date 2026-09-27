@@ -107,8 +107,8 @@ Cloning the repository and running `python -m steerwx run` does not automaticall
 ## 1. Install SteerWX
 
 ```powershell
-git clone https://github.com/samzhou1972/clawbridge-wechat.git
-cd clawbridge-wechat
+git clone https://github.com/samzhou1972/steerwx.git
+cd steerwx
 python -m pip install -e .
 ```
 
